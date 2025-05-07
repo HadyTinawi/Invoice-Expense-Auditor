@@ -32,3 +32,4 @@ pytest-cov>=4.1.0
 
 # Utilities
 tqdm>=4.65.0
+PyYAML>=6.0.0  # For rule configuration serialization

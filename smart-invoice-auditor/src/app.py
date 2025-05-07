@@ -20,6 +20,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.ocr.processor import create_processor
 from src.agent.auditor import AuditorAgent
 from src.policy.manager import PolicyManager
+from src.audit.rules import RuleEngine, create_default_rule_sets
 
 
 # Set page configuration
@@ -88,22 +89,59 @@ def process_invoice(invoice_file, policy_file=None, ocr_engine="tesseract"):
         "use_agent_analysis": True
     }
     
+    # Create rule engine with default rule sets
+    rule_engine = RuleEngine()
+    for name, rule_set in create_default_rule_sets().items():
+        rule_engine.add_rule_set(rule_set)
+    
     # Decide whether to use the simple agent or the workflow
     use_workflow = os.environ.get("USE_WORKFLOW", "false").lower() == "true"
     
+    # Perform agent-based audit
     if use_workflow:
         from src.agent.workflow import AuditWorkflow
         workflow = AuditWorkflow(config=agent_config)
         
         # Audit invoice using workflow
         with st.spinner("Analyzing invoice using LangGraph workflow..."):
-            audit_results = workflow.run_audit(invoice_data, policy_data)
+            agent_results = workflow.run_audit(invoice_data, policy_data)
     else:
         auditor = AuditorAgent(config=agent_config)
         
         # Audit invoice using agent
         with st.spinner("Analyzing invoice using LangChain agent..."):
-            audit_results = auditor.audit_invoice(invoice_data, policy_data)
+            agent_results = auditor.audit_invoice(invoice_data, policy_data)
+    
+    # Perform rule-based audit
+    with st.spinner("Performing rule-based audit..."):
+        rule_context = {"policy_data": policy_data}
+        rule_results = rule_engine.audit_invoice(invoice_data, "comprehensive_audit", rule_context)
+    
+    # Combine results
+    audit_results = agent_results.copy()
+    
+    # Add rule-based issues
+    rule_based_issues = []
+    for result in rule_results.get("results", []):
+        if not result.get("passed", True):
+            rule_based_issues.append({
+                "type": f"Rule Violation: {result['rule_id']}",
+                "description": result["message"],
+                "severity": result["severity"],
+                "source": "rule_engine"
+            })
+    
+    # Add rule-based issues to the combined results
+    if rule_based_issues:
+        audit_results["issues"].extend(rule_based_issues)
+        audit_results["issues_found"] = True
+    
+    # Update summary to include rule-based results
+    audit_results["rule_engine_results"] = {
+        "total_rules": rule_results.get("total_rules", 0),
+        "passed_rules": rule_results.get("passed_rules", 0),
+        "failed_rules": rule_results.get("failed_rules", 0)
+    }
     
     # Clean up temporary invoice file
     os.unlink(invoice_path)
@@ -123,6 +161,21 @@ def display_results(audit_results):
     with col3:
         st.metric("Total", f"${audit_results.get('total', 0.0):.2f}")
     
+    # Display rule-based audit results if available
+    if "rule_engine_results" in audit_results:
+        st.subheader("Rule-Based Audit")
+        rule_results = audit_results["rule_engine_results"]
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Rules", rule_results.get("total_rules", 0))
+        with col2:
+            st.metric("Passed Rules", rule_results.get("passed_rules", 0),
+                     delta=rule_results.get("passed_rules", 0), delta_color="normal")
+        with col3:
+            st.metric("Failed Rules", rule_results.get("failed_rules", 0),
+                     delta=-rule_results.get("failed_rules", 0), delta_color="inverse")
+    
     # Display issues
     st.subheader("Audit Results")
     issues = audit_results.get("issues", [])
@@ -131,6 +184,22 @@ def display_results(audit_results):
         
         # Convert issues to DataFrame for display
         issues_df = pd.DataFrame(issues)
+        
+        # Add filters for source and severity
+        if not issues_df.empty and 'source' in issues_df.columns:
+            sources = ['All'] + sorted(issues_df['source'].unique().tolist())
+            selected_source = st.selectbox('Filter by source:', sources)
+            
+            if selected_source != 'All':
+                issues_df = issues_df[issues_df['source'] == selected_source]
+        
+        if not issues_df.empty and 'severity' in issues_df.columns:
+            severities = ['All', 'high', 'medium', 'low']
+            selected_severity = st.selectbox('Filter by severity:', severities)
+            
+            if selected_severity != 'All':
+                issues_df = issues_df[issues_df['severity'] == selected_severity]
+        
         st.dataframe(issues_df, use_container_width=True)
     else:
         st.success("No issues found!")

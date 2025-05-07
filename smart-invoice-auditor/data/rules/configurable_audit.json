@@ -1,0 +1,24 @@
+{
+  "name": "configurable_audit",
+  "description": "Configurable audit rules with custom parameters",
+  "rules": [
+    {
+      "rule_id": "required_fields",
+      "description": "Invoice should have all required fields",
+      "severity": "high",
+      "type": "RequiredFieldsRule"
+    },
+    {
+      "rule_id": "date_validity",
+      "description": "Invoice date should be valid and within acceptable range",
+      "severity": "medium",
+      "type": "DateValidityRule"
+    },
+    {
+      "rule_id": "max_amount",
+      "description": "Invoice total should not exceed maximum amount",
+      "severity": "high",
+      "type": "MaxAmountRule"
+    }
+  ]
+}

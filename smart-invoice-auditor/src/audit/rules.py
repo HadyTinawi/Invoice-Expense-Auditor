@@ -9,7 +9,7 @@ import re
 import json
 import yaml
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Union, Callable, Type
+from typing import Dict, Any, List, Optional, Union, Callable, Type, Tuple
 from abc import ABC, abstractmethod
 
 
