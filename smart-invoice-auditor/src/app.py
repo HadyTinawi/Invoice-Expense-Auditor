@@ -80,12 +80,30 @@ def process_invoice(invoice_file, policy_file=None, ocr_engine="tesseract"):
             st.warning(f"No policy found for vendor: {vendor_name}")
             policy_data = {}
     
-    # Create auditor agent
-    auditor = AuditorAgent()
+    # Create auditor agent with configuration
+    agent_config = {
+        "model_name": os.environ.get("OPENAI_MODEL", "gpt-4o"),
+        "temperature": 0.0,
+        "verbose": False,
+        "use_agent_analysis": True
+    }
     
-    # Audit invoice
-    with st.spinner("Analyzing invoice for issues..."):
-        audit_results = auditor.audit_invoice(invoice_data, policy_data)
+    # Decide whether to use the simple agent or the workflow
+    use_workflow = os.environ.get("USE_WORKFLOW", "false").lower() == "true"
+    
+    if use_workflow:
+        from src.agent.workflow import AuditWorkflow
+        workflow = AuditWorkflow(config=agent_config)
+        
+        # Audit invoice using workflow
+        with st.spinner("Analyzing invoice using LangGraph workflow..."):
+            audit_results = workflow.run_audit(invoice_data, policy_data)
+    else:
+        auditor = AuditorAgent(config=agent_config)
+        
+        # Audit invoice using agent
+        with st.spinner("Analyzing invoice using LangChain agent..."):
+            audit_results = auditor.audit_invoice(invoice_data, policy_data)
     
     # Clean up temporary invoice file
     os.unlink(invoice_path)

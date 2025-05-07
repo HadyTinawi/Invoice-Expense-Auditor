@@ -81,14 +81,33 @@ def process_invoice(invoice_path: str, policy_path: Optional[str] = None,
             console.print(f"[bold yellow]Warning:[/bold yellow] No policy found for vendor: {vendor_name}")
             policy_data = {}
     
-    # Create auditor agent
+    # Create auditor agent with configuration
     console.print("Creating auditor agent...")
-    auditor = AuditorAgent()
+    agent_config = {
+        "model_name": os.environ.get("OPENAI_MODEL", "gpt-4o"),
+        "temperature": 0.0,
+        "verbose": False,
+        "use_agent_analysis": True
+    }
     
-    # Audit invoice
-    console.print("Auditing invoice...")
-    with console.status("[bold green]Analyzing invoice for issues...[/bold green]"):
-        audit_results = auditor.audit_invoice(invoice_data, policy_data)
+    # Decide whether to use the simple agent or the workflow
+    use_workflow = os.environ.get("USE_WORKFLOW", "false").lower() == "true"
+    
+    if use_workflow:
+        from src.agent.workflow import AuditWorkflow
+        workflow = AuditWorkflow(config=agent_config)
+        
+        # Audit invoice using workflow
+        console.print("Auditing invoice using LangGraph workflow...")
+        with console.status("[bold green]Analyzing invoice for issues...[/bold green]"):
+            audit_results = workflow.run_audit(invoice_data, policy_data)
+    else:
+        auditor = AuditorAgent(config=agent_config)
+        
+        # Audit invoice using agent
+        console.print("Auditing invoice using LangChain agent...")
+        with console.status("[bold green]Analyzing invoice for issues...[/bold green]"):
+            audit_results = auditor.audit_invoice(invoice_data, policy_data)
     
     # Save results if output path is provided
     if output_path:
