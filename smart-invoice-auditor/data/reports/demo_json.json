@@ -1,0 +1,48 @@
+{
+  "invoice_id": "INV-2023-004",
+  "vendor": "Office Supplies Inc.",
+  "date": "2023-07-10",
+  "total": 7020.0,
+  "subtotal": 6500.0,
+  "tax": 520.0,
+  "issues_found": true,
+  "issues": [
+    {
+      "type": "Rule Violation: max_amount",
+      "description": "Invoice total ($7020.00) exceeds maximum allowed amount ($5000.00)",
+      "severity": "high",
+      "source": "rule_engine",
+      "explanation": "The invoice total exceeds the maximum allowed amount for this type of expense. This could indicate unauthorized spending or a purchase that requires additional approval.",
+      "recommendation": "Verify if proper authorization was obtained for this expense and check if it should have been processed through a different procurement channel.",
+      "title": "Maximum Amount Exceeded"
+    },
+    {
+      "type": "Rule Violation: max_item_price",
+      "description": "Line items exceed maximum price for their category: Executive Desk ($3500.00 > $1000.00)",
+      "severity": "medium",
+      "source": "rule_engine",
+      "explanation": "One or more items exceed the maximum allowed price for their category. This could indicate premium purchases that require special approval.",
+      "recommendation": "Verify if the items with excessive prices were authorized and if they represent the best value for the organization.",
+      "title": "Item Price Limit Exceeded"
+    },
+    {
+      "type": "Rule Violation: allowed_categories",
+      "description": "Invoice contains unauthorized categories: entertainment",
+      "severity": "medium",
+      "source": "rule_engine",
+      "explanation": "The invoice contains expense categories that are not authorized by company policy. This could indicate an attempt to categorize expenses incorrectly to bypass spending controls.",
+      "recommendation": "Review the expense categorization and determine if it's appropriate or if the expense should be rejected.",
+      "title": "Unauthorized Expense Category"
+    }
+  ],
+  "summary": "Found 3 issues in invoice INV-2023-004 (1 high, 2 medium, 0 low priority). Recommend immediate review due to high-priority issues.",
+  "rule_engine_results": {
+    "total_rules": 7,
+    "passed_rules": 4,
+    "failed_rules": 3
+  },
+  "report_metadata": {
+    "generated_at": "2025-05-07T15:27:51.671461",
+    "generator": "Smart Invoice Auditor Report Generator"
+  }
+}

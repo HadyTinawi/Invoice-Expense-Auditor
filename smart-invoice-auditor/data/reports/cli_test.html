@@ -114,7 +114,7 @@
 
     <div class="header">
         <h1>Invoice Audit Report</h1>
-        <p>Generated: 2025-05-07 15:09:05</p>
+        <p>Generated: 2025-05-07 15:24:59</p>
     </div>
 
     <div class="section">
@@ -123,19 +123,19 @@
             <table class="info-table">
                 <tr>
                     <td>Invoice ID:</td>
-                    <td>INV-2023-005</td>
+                    <td>INV-2023-004</td>
                 </tr>
                 <tr>
                     <td>Vendor:</td>
-                    <td>Tech Solutions Ltd.</td>
+                    <td>Office Supplies Inc.</td>
                 </tr>
                 <tr>
                     <td>Date:</td>
-                    <td>2023-07-15</td>
+                    <td>2023-07-10</td>
                 </tr>
                 <tr>
                     <td>Total:</td>
-                    <td>$2450.00</td>
+                    <td>$7020.00</td>
                 </tr>
             </table>
         </div>
@@ -144,7 +144,7 @@
     <div class="section">
         <div class="section-header">Audit Summary</div>
         <div class="section-content">
-            <p>Found 2 issues in invoice INV-2023-005 (1 high, 1 medium, 0 low priority). Recommend review at earliest convenience.</p>
+            <p>Found 3 issues in invoice INV-2023-004 (1 high, 2 medium, 0 low priority). Recommend immediate review due to high-priority issues.</p>
 
             <div class="summary-metrics">
                 <div class="metric">
@@ -152,48 +152,48 @@
                     <div class="metric-label">Total Rules</div>
                 </div>
                 <div class="metric" style="color: #28a745;">
-                    <div class="metric-value">5</div>
+                    <div class="metric-value">4</div>
                     <div class="metric-label">Passed Rules</div>
                 </div>
                 <div class="metric" style="color: #dc3545;">
-                    <div class="metric-value">2</div>
+                    <div class="metric-value">3</div>
                     <div class="metric-label">Failed Rules</div>
                 </div>
             </div>
         </div>
     </div>
     <div class="section">
-        <div class="section-header">Detailed Issues (2)</div>
+        <div class="section-header">Detailed Issues (3)</div>
         <div class="section-content">
 
-            <div class="issue" style="border-left-color: #ffc107">
-                <div class="issue-header">
-                    <div class="issue-title">Total Calculation Error</div>
-                    <div class="severity-badge" style="background-color: #ffc107">
-                        medium
-                    </div>
-                </div>
-                <p><strong>Source:</strong> rule_engine</p>
-                <p><strong>Description:</strong> Total ($2450.00) doesn&#x27;t match subtotal ($2250.00) + tax ($200.00) = $2450.00</p>
-
-                <div class="explanation">
-                    <strong>Explanation:</strong>
-                    <p>The invoice total doesn&#x27;t match the sum of subtotal and tax. This could indicate a calculation error, intentional manipulation, or a simple mistake in arithmetic.</p>
-                </div>
-                <div class="recommendation">
-                    <strong>Recommendation:</strong>
-                    <p>Verify all calculations and request a corrected invoice if necessary.</p>
-                </div>
-            </div>
             <div class="issue" style="border-left-color: #dc3545">
                 <div class="issue-header">
-                    <div class="issue-title">Item Price Limit Exceeded</div>
+                    <div class="issue-title">Maximum Amount Exceeded</div>
                     <div class="severity-badge" style="background-color: #dc3545">
                         high
                     </div>
                 </div>
                 <p><strong>Source:</strong> rule_engine</p>
-                <p><strong>Description:</strong> Line items exceed maximum price for their category: Premium Software License ($1200.00 &gt; $400.00)</p>
+                <p><strong>Description:</strong> Invoice total ($7020.00) exceeds maximum allowed amount ($5000.00)</p>
+
+                <div class="explanation">
+                    <strong>Explanation:</strong>
+                    <p>The invoice total exceeds the maximum allowed amount for this type of expense. This could indicate unauthorized spending or a purchase that requires additional approval.</p>
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong>
+                    <p>Verify if proper authorization was obtained for this expense and check if it should have been processed through a different procurement channel.</p>
+                </div>
+            </div>
+            <div class="issue" style="border-left-color: #ffc107">
+                <div class="issue-header">
+                    <div class="issue-title">Item Price Limit Exceeded</div>
+                    <div class="severity-badge" style="background-color: #ffc107">
+                        medium
+                    </div>
+                </div>
+                <p><strong>Source:</strong> rule_engine</p>
+                <p><strong>Description:</strong> Line items exceed maximum price for their category: Executive Desk ($3500.00 &gt; $1000.00)</p>
 
                 <div class="explanation">
                     <strong>Explanation:</strong>
@@ -202,6 +202,25 @@
                 <div class="recommendation">
                     <strong>Recommendation:</strong>
                     <p>Verify if the items with excessive prices were authorized and if they represent the best value for the organization.</p>
+                </div>
+            </div>
+            <div class="issue" style="border-left-color: #ffc107">
+                <div class="issue-header">
+                    <div class="issue-title">Unauthorized Expense Category</div>
+                    <div class="severity-badge" style="background-color: #ffc107">
+                        medium
+                    </div>
+                </div>
+                <p><strong>Source:</strong> rule_engine</p>
+                <p><strong>Description:</strong> Invoice contains unauthorized categories: entertainment</p>
+
+                <div class="explanation">
+                    <strong>Explanation:</strong>
+                    <p>The invoice contains expense categories that are not authorized by company policy. This could indicate an attempt to categorize expenses incorrectly to bypass spending controls.</p>
+                </div>
+                <div class="recommendation">
+                    <strong>Recommendation:</strong>
+                    <p>Review the expense categorization and determine if it&#x27;s appropriate or if the expense should be rejected.</p>
                 </div>
             </div>        </div>
     </div>
