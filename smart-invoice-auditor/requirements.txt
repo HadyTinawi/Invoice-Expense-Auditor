@@ -1,34 +1,23 @@
+# Smart Invoice Auditor Dependencies
 # Core dependencies
-python-dotenv>=1.0.0
-pydantic>=2.0.0
-
-# OCR Processing
+numpy>=1.26.0
+pillow>=10.4.0
 pytesseract>=0.3.10
-Pillow>=10.0.0
 pdf2image>=1.16.3
-boto3>=1.28.0  # For AWS Textract integration
+boto3>=1.38.11
+reportlab>=4.0.0
+python-multipart>=0.0.5
+python-dotenv>=1.0.0
+pytest>=7.0.0
 
-# Agent Framework
-langchain>=0.0.267
-langchain-core>=0.0.10
-langchain-community>=0.0.10
-langgraph>=0.0.15
-openai>=1.0.0
+# UI and API
+gradio>=3.50.2
+fastapi>=0.95.0
 
-# Data Processing
-pandas>=2.0.0
-numpy>=1.24.0
+# Data processing and extraction
+regex>=2024.0.0
+PyPDF2>=3.0.0
+opencv-python>=4.7.0.0
 
-# Web Interface
-streamlit>=1.24.0
-
-# CLI Interface
-typer>=0.9.0
-rich>=13.4.0
-
-# Testing
-pytest>=7.3.1
-pytest-cov>=4.1.0
-
-# Utilities
-tqdm>=4.65.0
+# Web functionality
+requests>=2.31.0
