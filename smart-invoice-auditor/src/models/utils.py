@@ -45,13 +45,13 @@ def save_invoice_to_json(invoice: Invoice, output_path: str) -> str:
     filename = f"{date_str}_{safe_id}.json"
     full_path = os.path.join(output_path, filename)
     
-    # Convert invoice to dictionary
+    # Convert invoice to dictionary using the to_dict method which handles custom objects
     invoice_dict = invoice.to_dict()
     
     # Write to file
     try:
         with open(full_path, 'w') as f:
-            json.dump(invoice_dict, f, indent=2)
+            json.dump(invoice_dict, f, indent=2, default=str)  # Use default=str as fallback serializer
         return full_path
     except Exception as e:
         logger.error(f"Failed to save invoice to {full_path}: {str(e)}")

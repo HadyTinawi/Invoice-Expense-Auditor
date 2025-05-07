@@ -43,9 +43,63 @@ class OCRProcessor:
         self.config = config or {}
         self.logger = logger
     
+    def process_file(self, file_path: str) -> Dict[str, Any]:
+        """
+        Process any file type (PDF or image) and extract text and structured data
+        
+        Args:
+            file_path: Path to the file (PDF or image)
+            
+        Returns:
+            Dict containing extracted text and structured data
+        """
+        file_extension = os.path.splitext(file_path)[1].lower()
+        
+        # If it's a PDF, use the PDF processing method
+        if file_extension == '.pdf':
+            return self.process_pdf(file_path)
+        # If it's an image file, use the image processing method
+        elif file_extension in ['.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif']:
+            return self.process_image(file_path)
+        else:
+            raise ValueError(f"Unsupported file type: {file_extension}. Supported types are: .pdf, .png, .jpg, .jpeg, .tiff, .bmp, .gif")
+    
     def process_pdf(self, pdf_path: str) -> Dict[str, Any]:
         """Process a PDF file and extract text and structured data"""
         raise NotImplementedError("Subclasses must implement this method")
+    
+    def process_image(self, image_path: str) -> Dict[str, Any]:
+        """Process an image file and extract text and structured data"""
+        raise NotImplementedError("Subclasses must implement this method")
+    
+    def validate_file(self, file_path: str) -> bool:
+        """
+        Validate that the file exists and is accessible
+        
+        Args:
+            file_path: Path to the file
+            
+        Returns:
+            True if the file is valid
+            
+        Raises:
+            OCRError: If the file is invalid or inaccessible
+        """
+        path = Path(file_path)
+        
+        # Check if file exists
+        if not path.exists():
+            raise OCRError(f"File does not exist: {file_path}")
+        
+        # Check if file is readable
+        if not os.access(file_path, os.R_OK):
+            raise OCRError(f"File is not readable: {file_path}")
+        
+        # Check if file is not empty
+        if path.stat().st_size == 0:
+            raise OCRError(f"File is empty: {file_path}")
+        
+        return True
     
     def validate_pdf(self, pdf_path: str) -> bool:
         """
@@ -79,6 +133,47 @@ class OCRProcessor:
             raise PDFValidationError(f"PDF file is empty: {pdf_path}")
         
         return True
+    
+    def validate_image(self, image_path: str) -> bool:
+        """
+        Validate that the image file exists and is accessible
+        
+        Args:
+            image_path: Path to the image file
+            
+        Returns:
+            True if the image is valid
+            
+        Raises:
+            OCRError: If the image is invalid or inaccessible
+        """
+        path = Path(image_path)
+        
+        # Check if file exists
+        if not path.exists():
+            raise OCRError(f"Image file does not exist: {image_path}")
+        
+        # Check if file is an image (by extension)
+        valid_extensions = ['.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif']
+        if path.suffix.lower() not in valid_extensions:
+            raise OCRError(f"File is not a supported image type: {image_path}. Supported types: {', '.join(valid_extensions)}")
+        
+        # Check if file is readable
+        if not os.access(image_path, os.R_OK):
+            raise OCRError(f"Image file is not readable: {image_path}")
+        
+        # Check if file is not empty
+        if path.stat().st_size == 0:
+            raise OCRError(f"Image file is empty: {image_path}")
+        
+        # Try to open with PIL to validate it's a proper image
+        try:
+            with Image.open(image_path) as img:
+                # Just accessing a property to ensure the image is valid
+                _ = img.size
+            return True
+        except Exception as e:
+            raise OCRError(f"Invalid image file: {image_path}. Error: {str(e)}")
     
     def preprocess_image(self, image: Image.Image) -> Image.Image:
         """
@@ -497,6 +592,71 @@ class TesseractProcessor(OCRProcessor):
         
         return line_items
 
+    def process_image(self, image_path: str) -> Dict[str, Any]:
+        """
+        Process an image file using Tesseract OCR
+        
+        Args:
+            image_path: Path to the image file
+            
+        Returns:
+            Dict containing extracted information and raw text
+            
+        Raises:
+            OCRError: If the image is invalid
+            OCRExtractionError: If OCR extraction fails
+        """
+        try:
+            # Validate the image file
+            self.validate_image(image_path)
+            
+            # Open and process the image
+            self.logger.info(f"Processing image: {image_path}")
+            
+            try:
+                # Open the image with PIL
+                img = Image.open(image_path)
+                
+                # Preprocess the image for better OCR results
+                processed_img = self.preprocess_image(img)
+                
+                # Perform OCR on the processed image
+                text = pytesseract.image_to_string(processed_img, **self.tesseract_config)
+                
+                # Store the extracted text
+                results = [{
+                    "page": 1,  # Single page for images
+                    "text": text,
+                    "confidence": self._get_confidence(processed_img)
+                }]
+                
+                # Extract structured data from the text
+                extracted_data = {
+                    "invoice_id": self._extract_invoice_id(results),
+                    "date": self._extract_date(results),
+                    "total": self._extract_total(results),
+                    "vendor": self._extract_vendor(results),
+                    "line_items": self._extract_line_items(results),
+                    "subtotal": self._extract_subtotal(results),
+                    "tax": self._extract_tax(results),
+                    "raw_text": text,
+                    "pages": 1,
+                    "confidence": self._get_confidence(processed_img)
+                }
+                
+                self.logger.info(f"Extraction completed with confidence: {extracted_data['confidence']:.2f}%")
+                return extracted_data
+                
+            except Exception as e:
+                self.logger.error(f"Error processing image: {str(e)}")
+                raise OCRExtractionError(f"Failed to process image: {str(e)}")
+                
+        except OCRError:
+            raise
+        except Exception as e:
+            self.logger.error(f"OCR extraction error: {str(e)}")
+            raise OCRExtractionError(f"Failed to process image: {str(e)}")
+
 
 class TextractProcessor(OCRProcessor):
     """OCR processor using AWS Textract"""
@@ -618,12 +778,94 @@ class TextractProcessor(OCRProcessor):
     _extract_tax = TesseractProcessor._extract_tax
     _extract_line_items = TesseractProcessor._extract_line_items
 
+    def process_image(self, image_path: str) -> Dict[str, Any]:
+        """
+        Process an image file using AWS Textract
+        
+        Args:
+            image_path: Path to the image file
+            
+        Returns:
+            Dict containing extracted information and raw text
+            
+        Raises:
+            OCRError: If the image is invalid
+            OCRExtractionError: If OCR extraction fails
+        """
+        try:
+            # Validate the image file
+            self.validate_image(image_path)
+            
+            # Read the image file as bytes
+            with open(image_path, 'rb') as file:
+                image_bytes = file.read()
+            
+            # Process the image with Textract
+            self.logger.info(f"Processing image with AWS Textract: {image_path}")
+            
+            # Use the synchronous API for images
+            try:
+                response = self.textract_client.detect_document_text(Document={'Bytes': image_bytes})
+                text_blocks = response['Blocks']
+            
+                # Extract text from Textract blocks
+                full_text = ""
+                for block in text_blocks:
+                    if block['BlockType'] == 'LINE':
+                        full_text += block['Text'] + "\n"
+                
+                # Create a result structure
+                results = [{
+                    "page": 1,  # Single page for images
+                    "text": full_text,
+                    "confidence": self._get_confidence(text_blocks)
+                }]
+                
+                # Extract structured data from the text
+                extracted_data = {
+                    "invoice_id": self._extract_invoice_id(results),
+                    "date": self._extract_date(results),
+                    "total": self._extract_total(results),
+                    "vendor": self._extract_vendor(results),
+                    "line_items": self._extract_line_items(results),
+                    "subtotal": self._extract_subtotal(results),
+                    "tax": self._extract_tax(results),
+                    "raw_text": full_text,
+                    "pages": 1,
+                    "confidence": self._get_confidence(text_blocks)
+                }
+                
+                self.logger.info(f"Extraction completed with confidence: {extracted_data['confidence']:.2f}%")
+                return extracted_data
+                
+            except boto3.exceptions.Boto3Error as e:
+                self.logger.error(f"AWS Textract error: {str(e)}")
+                raise OCRExtractionError(f"Failed to process with AWS Textract: {str(e)}")
+                
+        except OCRError:
+            raise
+        except Exception as e:
+            self.logger.error(f"OCR extraction error: {str(e)}")
+            raise OCRExtractionError(f"Failed to process image: {str(e)}")
+
 
 def create_processor(processor_type: str = "tesseract", config: Optional[Dict[str, Any]] = None) -> OCRProcessor:
-    """Factory function to create an OCR processor"""
+    """
+    Create an OCR processor of the specified type
+    
+    Args:
+        processor_type: Type of processor to create ('tesseract' or 'textract')
+        config: Configuration for the processor
+        
+    Returns:
+        An instance of OCRProcessor
+        
+    Raises:
+        ValueError: If the processor type is invalid
+    """
     if processor_type.lower() == "tesseract":
         return TesseractProcessor(config)
     elif processor_type.lower() == "textract":
         return TextractProcessor(config)
     else:
-        raise ValueError(f"Unsupported processor type: {processor_type}")
+        raise ValueError(f"Invalid processor type: {processor_type}. Valid types are 'tesseract' or 'textract'")

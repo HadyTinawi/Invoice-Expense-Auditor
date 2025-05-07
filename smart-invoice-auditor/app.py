@@ -20,6 +20,7 @@ import gradio as gr
 from pathlib import Path
 import sys
 from datetime import datetime
+import shutil  # Added for better file handling
 
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -55,6 +56,7 @@ def process_file(file, processor_type="tesseract"):
     """
     log_output = []
     ocr_data = {}
+    temp_path = None
     
     try:
         if file is None:
@@ -70,37 +72,56 @@ def process_file(file, processor_type="tesseract"):
         log_output.append(f"File size: {file_size} bytes")
         log_output.append(f"OCR Processor: {processor_type}")
         
-        # Create a temporary file to save the upload
+        # Create a temporary file with the same extension
         suffix = Path(file_path).suffix
         
+        # Improved file handling for Gradio uploads
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            # Handle different file object types
-            if hasattr(file, 'read') and callable(file.read):
-                # If it's a file-like object with a read method
-                temp_file.write(file.read())
-            elif isinstance(file, str):
-                # If it's a string path
-                with open(file, 'rb') as src_file:
-                    temp_file.write(src_file.read())
-            else:
-                # If it's a Gradio file object (which could be different formats)
-                if hasattr(file, 'name'):
-                    # It's likely a Gradio file object with a path
+            temp_path = temp_file.name
+            
+            # Handle Gradio file objects more explicitly
+            if isinstance(file, gr.File) or hasattr(file, 'name'):
+                # Copy the file directly instead of reading/writing
+                try:
+                    shutil.copy2(file.name, temp_path)
+                    log_output.append(f"File copied to temporary location: {temp_path}")
+                except Exception as copy_error:
+                    log_output.append(f"Error copying file: {str(copy_error)}")
+                    # Fallback to read/write method
                     with open(file.name, 'rb') as src_file:
-                        temp_file.write(src_file.read())
+                        file_content = src_file.read()
+                        temp_file.write(file_content)
+                        log_output.append(f"File content read and written to temporary file: {len(file_content)} bytes")
+            else:
+                # Handle file-like object with read method
+                if hasattr(file, 'read') and callable(file.read):
+                    file_content = file.read()
+                    temp_file.write(file_content)
+                    log_output.append(f"File content read and written to temporary file: {len(file_content)} bytes")
+                # Handle string path
+                elif isinstance(file, str):
+                    with open(file, 'rb') as src_file:
+                        file_content = src_file.read()
+                        temp_file.write(file_content)
+                        log_output.append(f"File content read from path and written to temporary file: {len(file_content)} bytes")
                 else:
                     raise ValueError(f"Unsupported file object type: {type(file)}")
-            
-            temp_path = temp_file.name
+        
+        # Verify the temporary file exists and is not empty
+        if not os.path.exists(temp_path):
+            raise FileNotFoundError(f"Temporary file was not created: {temp_path}")
+        
+        if os.path.getsize(temp_path) == 0:
+            raise ValueError(f"Temporary file is empty: {temp_path}")
         
         # Process the file and capture OCR data
         logger.info(f"Processing file: {file_path} (saved as {temp_path})")
-        log_output.append(f"Temporary file created at: {temp_path}")
+        log_output.append(f"Temporary file created at: {temp_path} with size: {os.path.getsize(temp_path)} bytes")
         
         try:
             # First get the raw OCR data
             processor = create_processor(processor_type)
-            ocr_data = processor.process_pdf(temp_path)
+            ocr_data = processor.process_file(temp_path)
             log_output.append(f"OCR processing complete. Confidence: {ocr_data.get('confidence', 0):.2f}%")
             
             # Log the raw OCR data for debugging
@@ -126,11 +147,12 @@ def process_file(file, processor_type="tesseract"):
             
             # Convert invoice to dict and then to JSON (avoids serialization issues)
             invoice_dict = invoice.to_dict()  # This should handle proper conversion of custom objects
-            json_data = json.dumps(invoice_dict, indent=2)
+            json_data = json.dumps(invoice_dict, indent=2, default=str)
             
             raw_text = ocr_data.get("raw_text", "No raw text available")
             
-            # Safely serialize OCR data
+            # Safely serialize OCR data by removing raw_text (which can be large) and 
+            # using default=str to handle any non-serializable objects
             safe_ocr_data = {k: v for k, v in ocr_data.items() if k != 'raw_text'}
             ocr_json = json.dumps(safe_ocr_data, indent=2, default=str)
             
@@ -157,13 +179,14 @@ def process_file(file, processor_type="tesseract"):
             
             # Generate outputs
             summary = f"Error: {str(e)}"
-            json_data = json.dumps(error_data, indent=2)
+            json_data = json.dumps(error_data, indent=2, default=str)  # Add default=str for serialization
             raw_text = ocr_data.get("raw_text", "No raw text available")
             ocr_json = json.dumps({k: v for k, v in ocr_data.items() if k != 'raw_text'}, indent=2, default=str)
         
         # Clean up the temporary file
-        os.unlink(temp_path)
-        log_output.append("Temporary file deleted")
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+            log_output.append("Temporary file deleted")
         log_output.append("Processing complete")
         
         return summary, json_data, raw_text, ocr_json, "\n".join(log_output)
@@ -172,18 +195,32 @@ def process_file(file, processor_type="tesseract"):
         logger.error(f"Error processing file: {str(e)}")
         log_output.append(f"ERROR: {str(e)}")
         log_output.append(traceback.format_exc())
+        
+        # Clean up temporary file if it exists
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+                log_output.append("Temporary file deleted")
+            except Exception as cleanup_error:
+                log_output.append(f"Error cleaning up temporary file: {str(cleanup_error)}")
+                
         return f"Error: {str(e)}", "{}", "Processing failed", "{}", "\n".join(log_output)
+
+# Function to load and process a sample file
+def load_sample(sample_path):
+    """Load a sample file and return it as a file object"""
+    return sample_path
 
 def main():
     """Create and launch the Gradio interface."""
     # Create a Gradio interface
     with gr.Blocks(title="Invoice OCR Testing") as demo:
         gr.Markdown("# Smart Invoice Auditor - OCR Test")
-        gr.Markdown("Upload a PDF or image file to extract invoice information using OCR.")
+        gr.Markdown("Upload a PDF or image file (PNG, JPG, TIFF, etc.) to extract invoice information using OCR.")
         
         with gr.Row():
             with gr.Column(scale=1):
-                file_input = gr.File(label="Upload Invoice (PDF or Image)")
+                file_input = gr.File(label="Upload Invoice (PDF or Image - PNG, JPG, etc.)")
                 processor_type = gr.Radio(
                     ["tesseract", "textract"], 
                     label="OCR Processor", 
@@ -211,26 +248,38 @@ def main():
             outputs=[summary_output, json_output, text_output, ocr_output, log_output]
         )
         
-        # Add example functionality with our sample files
+        # Add example functionality for sample files
         examples_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "samples")
-        examples = []
         
-        sample_pdf = os.path.join(examples_dir, "sample_invoice.pdf")
-        sample_png = os.path.join(examples_dir, "sample_invoice.png")
+        # Check for sample files
+        sample_files = []
+        sample_labels = []
         
-        if os.path.exists(sample_pdf):
-            examples.append(sample_pdf)
-        if os.path.exists(sample_png):
-            examples.append(sample_png)
-            
-        if examples:
-            gr.Examples(
-                examples=examples,
-                inputs=file_input
-            )
+        sample_pdf_path = os.path.join(examples_dir, "sample_invoice.pdf")
+        if os.path.exists(sample_pdf_path):
+            sample_files.append(sample_pdf_path)
+            sample_labels.append("Sample Invoice (PDF)")
+        
+        sample_png_path = os.path.join(examples_dir, "sample_invoice.png")
+        if os.path.exists(sample_png_path):
+            sample_files.append(sample_png_path)
+            sample_labels.append("Sample Invoice (PNG)")
+        
+        # Add examples section if any sample files exist
+        if sample_files:
+            gr.Markdown("### Sample Invoices")
+            with gr.Row():
+                for i, (sample_file, label) in enumerate(zip(sample_files, sample_labels)):
+                    sample_btn = gr.Button(label)
+                    # Set up the click event to load the sample file
+                    sample_btn.click(
+                        fn=lambda x=sample_file: x,
+                        inputs=[], 
+                        outputs=[file_input]
+                    )
     
     # Launch the interface
-    demo.launch(share=False, inbrowser=True)
+    demo.launch(server_port=7865, share=False, inbrowser=True)
 
 if __name__ == "__main__":
     main() 
