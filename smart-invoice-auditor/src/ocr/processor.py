@@ -18,6 +18,7 @@ import boto3
 import tempfile
 import json
 import numpy as np
+import cv2
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -80,55 +81,266 @@ class OCRProcessor:
         
         return True
     
-    def preprocess_image(self, image: Image.Image) -> Image.Image:
+    def preprocess_image(self, image: np.ndarray) -> np.ndarray:
         """
-        Preprocess an image to improve OCR quality
+        Preprocess image to enhance OCR quality.
+        
+        This function applies various image processing techniques to make the image
+        more readable for OCR. It includes adaptive thresholding and noise reduction.
         
         Args:
-            image: PIL Image to preprocess
+            image: The input image as a numpy array
             
         Returns:
-            Preprocessed image
+            The processed image ready for OCR
         """
-        # Convert to grayscale
-        image = image.convert('L')
+        self.logger.debug("Preprocessing image for OCR enhancement")
         
-        # Increase contrast
-        enhancer = ImageEnhance.Contrast(image)
-        image = enhancer.enhance(2.0)
+        # Convert to grayscale if image is in color
+        if len(image.shape) == 3 and image.shape[2] == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
         
-        # Apply noise reduction
-        image = image.filter(ImageFilter.MedianFilter(size=3))
+        # Store original dimensions for later comparison
+        original_height, original_width = gray.shape
         
-        # Sharpen the image
-        image = image.filter(ImageFilter.SHARPEN)
+        # Check if we need to scale up small images
+        scale_factor = 1
+        min_width = 1500
+        if original_width < min_width:
+            scale_factor = min_width / original_width
+            self.logger.debug(f"Scaling up image by factor of {scale_factor:.2f} for better OCR quality")
+            gray = cv2.resize(gray, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_CUBIC)
         
-        return image
+        # Create a copy of the original for comparison
+        original_processed = gray.copy()
+        
+        # Apply multiple preprocessing techniques and choose the best result
+        preprocessed_images = []
+        
+        # 1. Basic adaptive thresholding
+        threshold = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+        preprocessed_images.append(("adaptive_threshold", threshold))
+        
+        # 2. Bilateral filtering for noise reduction while preserving edges
+        bilateral = cv2.bilateralFilter(gray, 9, 75, 75)
+        # Apply adaptive threshold after bilateral filtering
+        bilateral_threshold = cv2.adaptiveThreshold(
+            bilateral, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+        preprocessed_images.append(("bilateral_filtering", bilateral_threshold))
+        
+        # 3. Otsu's thresholding for global binary processing
+        _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        preprocessed_images.append(("otsu_threshold", otsu))
+        
+        # 4. Dilated image to connect broken text
+        kernel = np.ones((1, 1), np.uint8)
+        dilated = cv2.dilate(gray, kernel, iterations=1)
+        # Apply adaptive threshold after dilation
+        dilated_threshold = cv2.adaptiveThreshold(
+            dilated, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+        preprocessed_images.append(("dilated_threshold", dilated_threshold))
+        
+        # 5. Eroded image for thin text
+        eroded = cv2.erode(gray, kernel, iterations=1)
+        # Apply adaptive threshold after erosion
+        eroded_threshold = cv2.adaptiveThreshold(
+            eroded, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+        preprocessed_images.append(("eroded_threshold", eroded_threshold))
+        
+        # 6. Contrast enhancement
+        # Create a CLAHE object (Contrast Limited Adaptive Histogram Equalization)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        clahe_applied = clahe.apply(gray)
+        # Apply adaptive threshold after contrast enhancement
+        clahe_threshold = cv2.adaptiveThreshold(
+            clahe_applied, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+        preprocessed_images.append(("contrast_enhanced", clahe_threshold))
+        
+        # OCR each preprocessed image variant to find the one that yields the best results
+        best_confidence = 0
+        best_image = original_processed  # Default to original if no improvement
+        
+        for name, processed_image in preprocessed_images:
+            try:
+                # Save the processed image temporarily
+                temp_file = self._save_temp_image(processed_image)
+                
+                # Run OCR on the preprocessed image using Tesseract
+                text = pytesseract.image_to_string(
+                    temp_file,
+                    config=self.config,
+                    lang='eng'
+                )
+                
+                # Calculate a simple confidence score based on text length and valid character proportion
+                char_count = len(text)
+                if char_count > 0:
+                    # Calculate the ratio of alphanumeric and punctuation characters
+                    valid_chars = sum(1 for c in text if c.isalnum() or c in ".,;:!?-()[]{}'\"/\\")
+                    confidence = valid_chars / char_count * 100
+                    
+                    if confidence > best_confidence:
+                        best_confidence = confidence
+                        best_image = processed_image
+                        self.logger.debug(f"Better preprocessing found: {name} with confidence {confidence:.2f}%")
+                
+                # Clean up the temporary file
+                os.remove(temp_file)
+                
+            except Exception as e:
+                self.logger.warning(f"Error during preprocessing evaluation for {name}: {str(e)}")
+        
+        self.logger.info(f"Best preprocessing method achieved {best_confidence:.2f}% confidence")
+        return best_image
+
+    def _save_temp_image(self, image: np.ndarray) -> str:
+        """Save a temporary image and return the file path."""
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png').name
+        cv2.imwrite(temp_file, image)
+        return temp_file
+
+    def process_image(self, image_path: str) -> Dict[str, Any]:
+        """
+        Process an image file using OCR to extract text and structured data.
+        
+        Args:
+            image_path: Path to the image file
+            
+        Returns:
+            A dictionary containing the extracted data
+            
+        Raises:
+            OCRError: If OCR processing fails
+        """
+        try:
+            self.logger.info(f"Processing image: {image_path}")
+            
+            # Read the image using OpenCV
+            image = cv2.imread(image_path)
+            if image is None:
+                raise OCRError(f"Failed to load image: {image_path}")
+            
+            # Preprocess the image to improve OCR quality
+            preprocessed = self.preprocess_image(image)
+            
+            # Save the preprocessed image temporarily for tesseract
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png').name
+            cv2.imwrite(temp_file, preprocessed)
+            
+            try:
+                # Apply OCR to extract text
+                ocr_results = []
+                
+                # Extract text using pytesseract
+                ocr_text = pytesseract.image_to_string(
+                    temp_file,
+                    config=self.config,
+                    lang='eng'
+                )
+                
+                # Get detailed OCR data including bounding boxes and confidence
+                ocr_data = pytesseract.image_to_data(
+                    temp_file,
+                    config=self.config,
+                    lang='eng',
+                    output_type=pytesseract.Output.DICT
+                )
+                
+                # Calculate overall confidence score
+                confidence_scores = [float(conf) for conf in ocr_data['conf'] if float(conf) > 0]
+                avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0
+                
+                self.logger.info(f"OCR extraction completed with confidence: {avg_confidence:.2f}%")
+                
+                # Add all words with their bounding boxes and confidence to results
+                for i in range(len(ocr_data['text'])):
+                    if ocr_data['text'][i].strip():
+                        word_data = {
+                            'text': ocr_data['text'][i],
+                            'conf': float(ocr_data['conf'][i]),
+                            'bbox': [
+                                ocr_data['left'][i],
+                                ocr_data['top'][i],
+                                ocr_data['width'][i],
+                                ocr_data['height'][i]
+                            ]
+                        }
+                        ocr_results.append(word_data)
+                
+                # Extract structured data from OCR results
+                extracted_data = self._extract_structured_data(ocr_results)
+                
+                # Add raw text and confidence
+                extracted_data['raw_text'] = ocr_text
+                extracted_data['confidence'] = avg_confidence
+                
+                # Add source file information
+                extracted_data['source_file'] = image_path
+                
+                return extracted_data
+            finally:
+                # Clean up temporary file
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+                
+        except Exception as e:
+            self.logger.error(f"OCR processing error: {str(e)}")
+            raise OCRError(f"Failed to process image: {str(e)}")
 
 
 class TesseractProcessor(OCRProcessor):
     """OCR processor using Tesseract"""
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        """Initialize the Tesseract processor with configuration"""
+        """Initialize the TesseractProcessor with configuration."""
         super().__init__(config)
         
-        # Configuration for Tesseract
-        self.tesseract_config = {
-            'lang': self.config.get('language', 'eng'),
-            'config': '--psm 6'  # Page segmentation mode: Assume a single uniform block of text
+        # Default Tesseract configuration
+        self.config = '--oem 3 --psm 6'
+        if config and 'tesseract_config' in config:
+            self.config = config['tesseract_config']
+            
+        # Regular expression patterns for extracting structured data
+        self.patterns = {
+            # Invoice number patterns - expanded to catch more variants
+            'invoice_id': r'(?i)(?:invoice|bill|receipt)(?:\s+(?:no|num|number|#|code|id))?(?:\s*[:.\s])?\s*([\w\d\-]+)',
+            'invoice_alt': r'(?i)(?:inv|bill|order|transaction|document)(?:\s+(?:no|num|number|#|code|id))?(?:\s*[:.\s])?\s*([\w\d\-]+)',
+            
+            # Extended date patterns
+            'date': r'(?i)(?:date|invoice\s+date|bill\s+date|issued|issued\s+on|dated)(?:\s*[:.\s])?\s*(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4}|\d{1,2}[-/\.\s]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-/\.\s]+\d{2,4})',
+            'due_date': r'(?i)(?:due|payment\s+due|due\s+date|payment\s+date|pay\s+by)(?:\s*[:.\s])?\s*(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4}|\d{1,2}[-/\.\s]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-/\.\s]+\d{2,4})',
+            
+            # Vendor information patterns - enhanced to catch more company name formats
+            'vendor': r'(?i)(?:vendor|supplier|seller|from|by|company|business|issued\s+by|merchant|store|billed\s+from|payee|provider)(?:\s*[:.\s])?\s*([A-Z&\'\s]{3,}(?:\s+LLC|\s+Inc|\s+Corp|\s+Ltd)?)',
+            'vendor_alt': r'(?i)(?:\s+LLC|\s+Inc\.?|\s+Corp\.?|\s+Ltd\.?|\s+Corporation|\s+Company|\s+GmbH)$',
+            
+            # Total amount patterns - expanded with currency symbols and more formats
+            'total': r'(?i)(?:total|amount|grand\s+total|balance|sum|payment|charge)(?:\s*[:.\s])?\s*(?:\$|€|£|¥)?(?:\s*)?([\d,]+\.\d{2}|\d+)',
+            'total_alt': r'(?i)(?:total(?:\s+due)?|amount(?:\s+due)?|balance(?:\s+due)?|to\s+pay)(?:\s*[:.\s])?\s*(?:\$|€|£|¥)?(?:\s*)?([\d,]+\.\d{2}|\d+)',
+            
+            # Subtotal and tax patterns - improved to catch more variants
+            'subtotal': r'(?i)(?:subtotal|sub\s*total|net|net\s+amount|amount|goods|merchandise|net\s+total)(?:\s*[:.\s])?\s*(?:\$|€|£|¥)?(?:\s*)?([\d,]+\.\d{2}|\d+)',
+            'tax': r'(?i)(?:tax|vat|gst|hst|sales\s+tax|tax\s+amount)(?:\s*[:.\s])?\s*(?:\$|€|£|¥)?(?:\s*)?([\d,]+\.\d{2}|\d+)',
+            
+            # Payment info patterns
+            'payment_terms': r'(?i)(?:terms|payment\s+terms|due\s+in)(?:\s*[:.\s])?\s*(.{3,30})',
+            'payment_method': r'(?i)(?:(?:payment|paid|pay)\s+(?:method|via|using|by)|method\s+of\s+payment)(?:\s*[:.\s])?\s*([A-Za-z]+(?:\s+[A-Za-z]+)?)',
+            
+            # Line item patterns with improved structure detection
+            'line_item_header': r'(?i)(description|item|service|product|qty|quantity|price|amount|total)',
+            'line_item_row': r'([A-Za-z0-9\s\-&]{3,})\s+([\d.]+)\s+(?:x\s+)?(\$?[\d.,]+)\s+(?:=\s+)?(\$?[\d.,]+)',
         }
         
         # DPI for PDF to image conversion
         self.dpi = self.config.get('dpi', 300)
-        
-        # Regular expressions for data extraction
-        self.patterns = {
-            'invoice_id': r'(?i)(?:invoice|inv|bill)(?:\s+)?(?:no|number|#|num)?(?:\s*)?[:.]?\s*([A-Z0-9][\w\-]*\d)',
-            'date': r'(?i)(?:date|invoice date|bill date)(?:\s*)?[:.]?\s*(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4}|\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2})',
-            'total': r'(?i)(?:total|amount|sum|balance)(?:\s+)?(?:due|paid)?(?:\s*)?[:.]?\s*[$£€]?\s*(\d{1,3}(?:[,\.]\d{3})*(?:\.\d{2})?)',
-            'vendor': r'(?i)(?:from|vendor|supplier|company|business)(?:\s*)?[:.]?\s*([A-Z][A-Za-z0-9\s&,\.]{2,50}(?:Inc|LLC|Ltd|Co|Corp|Corporation)?)'
-        }
     
     def process_pdf(self, pdf_path: str) -> Dict[str, Any]:
         """
@@ -246,19 +458,72 @@ class TesseractProcessor(OCRProcessor):
         return ""
     
     def _extract_date(self, results: List[Dict[str, Any]]) -> str:
-        """Extract date from OCR results"""
+        """Extract date from OCR results with enhanced detection"""
         all_text = "\n".join([r["text"] for r in results])
         
         self.logger.debug(f"Extracting date from text: {all_text[:200]}...")
         
         # Look for lines containing date-related keywords
-        date_keywords = ['date', 'issued', 'invoice date', 'bill date', 'dated']
-        date_lines = []
-        for line in all_text.split('\n'):
-            if any(keyword in line.lower() for keyword in date_keywords):
-                date_lines.append(line)
-                self.logger.debug(f"Found potential date line: {line}")
+        date_keywords = [
+            'date', 'issued', 'invoice date', 'bill date', 'dated', 
+            'issued on', 'invoice issued', 'invoice: ', 'date of issue',
+            'issue date', 'created on', 'issued date', 'billing date'
+        ]
         
+        # Create a more targeted search for date lines
+        date_lines = []
+        for i, line in enumerate(all_text.split('\n')):
+            lower_line = line.lower()
+            
+            # Check if line contains date keywords
+            if any(keyword in lower_line for keyword in date_keywords):
+                date_lines.append((i, line))
+                self.logger.debug(f"Found potential date line: {line}")
+                
+                # Also include the next line, as dates are often on the line after the label
+                if i + 1 < len(all_text.split('\n')):
+                    date_lines.append((i+1, all_text.split('\n')[i+1]))
+        
+        # Try expanded set of date patterns on the targeted date lines first
+        date_patterns = [
+            # Common date formats with separators (ordered by likelihood)
+            r'\b(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4})\b',  # 01/31/2022, 31-01-2022, etc.
+            r'\b(\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2})\b',    # 2022/01/31, 2022-01-31, etc.
+            
+            # Month/Year formats
+            r'\b(\d{1,2}[-/\.]\d{4})\b',  # 01/2022, 1-2022
+            r'\b(\d{4}[-/\.]\d{1,2})\b',  # 2022/01, 2022-01
+            
+            # Text date formats with various separators
+            r'\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b',
+            r'\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?\b',
+            r'\b\d{1,2}(?:st|nd|rd|th)?\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?),?\s+\d{4}\b',
+            r'\b\d{1,2}(?:st|nd|rd|th)?\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b',
+            
+            # Simple date formats without separators (harder to identify correctly)
+            r'\b(\d{8})\b',     # 20220131, 01312022
+            r'\b(\d{6})\b',     # 012022, 202201 (month/year formats)
+            
+            # Looser patterns with context
+            r'(?:date|invoice|issued|created)[\s:]*(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4})',
+            r'(?:date|invoice|issued|created)[\s:]*(\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2})'
+        ]
+        
+        # First check date-specific lines
+        for _, line in date_lines:
+            # Try with keyword context - most reliable
+            for pattern in date_patterns:
+                matches = re.findall(pattern, line)
+                if matches:
+                    date_str = matches[0]
+                    # If it's a tuple (from a group with multiple captures), take the first element
+                    if isinstance(date_str, tuple):
+                        date_str = date_str[0]
+                    date_str = date_str.strip()
+                    self.logger.info(f"Extracted date from keyword line: {date_str}")
+                    return date_str
+        
+        # If that fails, try the original approach with all text
         # Try regex pattern first using labeled date fields
         pattern = self.patterns['date']
         matches = re.findall(pattern, all_text)
@@ -268,47 +533,27 @@ class TesseractProcessor(OCRProcessor):
             self.logger.info(f"Extracted date using primary pattern: {date_str}")
             return date_str
         
-        # Expanded set of date patterns to match more formats
-        date_patterns = [
-            # Check for common formats with explicit date labels
-            r'(?i)(?:date|invoice date|bill date)(?:\s*)?[:.]?\s*(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4})',
-            r'(?i)(?:date|invoice date|bill date)(?:\s*)?[:.]?\s*(\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2})',
-            
-            # Common date formats (without labels)
-            r'\b(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4})\b',  # 01/31/2022, 31-01-2022, etc.
-            r'\b(\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2})\b',     # 2022/01/31, 2022-01-31, etc.
-            
-            # Text date formats
-            r'\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b',
-            r'\b\d{1,2}(?:st|nd|rd|th)?\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?),?\s+\d{4}\b'
-        ]
-        
-        # Check date lines first (these are more likely to contain the invoice date)
-        for pattern in date_patterns:
-            for line in date_lines:
+        # If we still haven't found a date, check each line for date-like patterns
+        for line in all_text.split('\n'):
+            for pattern in date_patterns:
                 matches = re.findall(pattern, line)
                 if matches:
-                    date_str = matches[0].strip()
-                    self.logger.info(f"Extracted date from keyword line using pattern {pattern}: {date_str}")
+                    date_str = matches[0]
+                    # If it's a tuple (from a group with multiple captures), take the first element
+                    if isinstance(date_str, tuple):
+                        date_str = date_str[0]
+                    date_str = date_str.strip()
+                    self.logger.info(f"Extracted date from full text: {date_str}")
                     return date_str
         
-        # Then check the entire text
-        for pattern in date_patterns:
-            matches = re.findall(pattern, all_text)
-            if matches:
-                date_str = matches[0].strip()
-                self.logger.info(f"Extracted date from full text using pattern {pattern}: {date_str}")
-                return date_str
-        
-        # If we still don't have a date, try a more aggressive approach
-        # Look for any sequence that looks like a date
-        broader_date_pattern = r'\b\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4}\b'
-        matches = re.findall(broader_date_pattern, all_text)
-        if matches:
-            # Take the first one that appears after "date" or near the top if no "date" keyword
-            possible_date = matches[0].strip()
-            self.logger.info(f"Extracted potential date using broader pattern: {possible_date}")
-            return possible_date
+        # If nothing works, look for any digit patterns that might be dates
+        # Try to find anything that looks remotely like a date
+        for line in all_text.split('\n'):
+            # Look for patterns like "date: 01.02.2023" or variations
+            if re.search(r'(?i)date.*?(\d[\d\s\./-]+)', line):
+                date_part = re.search(r'(?i)date.*?(\d[\d\s\./-]+)', line).group(1)
+                self.logger.info(f"Found potential date using loose pattern: {date_part.strip()}")
+                return date_part.strip()
         
         self.logger.warning("No date could be extracted from the invoice")
         return ""

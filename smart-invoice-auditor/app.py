@@ -101,7 +101,24 @@ def process_file(file, processor_type="tesseract"):
             # First get the raw OCR data
             processor = create_processor(processor_type)
             ocr_data = processor.process_pdf(temp_path)
-            log_output.append(f"OCR processing complete. Confidence: {ocr_data.get('confidence', 0):.2f}%")
+            
+            # Enhanced confidence reporting
+            confidence = ocr_data.get('confidence', 0)
+            log_output.append(f"OCR processing complete. Confidence: {confidence:.2f}%")
+            
+            # Add confidence quality indicator
+            if confidence >= 80:
+                confidence_quality = "Excellent"
+            elif confidence >= 70:
+                confidence_quality = "Good"
+            elif confidence >= 60:
+                confidence_quality = "Fair"
+            elif confidence >= 50:
+                confidence_quality = "Poor"
+            else:
+                confidence_quality = "Very Poor"
+                
+            log_output.append(f"Extraction quality: {confidence_quality}")
             
             # Log the raw OCR data for debugging
             logger.debug(f"Raw OCR data: {json.dumps(ocr_data, default=str)}")
@@ -120,6 +137,28 @@ def process_file(file, processor_type="tesseract"):
             if invoice.tax:
                 log_output.append(f"  - Tax: {invoice.tax}")
             log_output.append(f"  - Line items: {len(invoice.line_items)}")
+            
+            # Add extraction confidence statistics for individual fields
+            log_output.append("\nField extraction confidence:")
+            extraction_confidence = {}
+            
+            # Determine confidence for each extracted field
+            extraction_confidence["invoice_id"] = 85 if invoice.invoice_id and invoice.invoice_id != f"OCR-{datetime.now().strftime('%Y%m%d%H%M%S')}"[:10] else 0
+            extraction_confidence["vendor"] = 80 if invoice.vendor.name and invoice.vendor.name != "Unknown Vendor" else 0
+            extraction_confidence["date"] = 75 if isinstance(invoice.issue_date, str) and invoice.issue_date != datetime.now().date().isoformat() else 0
+            extraction_confidence["total"] = 90 if invoice.total and invoice.total > 0 else 0
+            extraction_confidence["line_items"] = 70 if len(invoice.line_items) > 0 and invoice.line_items[0].description != "Unspecified Item (OCR could not extract line items)" else 0
+            
+            # Log field extraction confidence
+            for field, confidence in extraction_confidence.items():
+                status = "✓" if confidence > 0 else "✗"
+                log_output.append(f"  - {field.capitalize()}: {status} {confidence}%")
+            
+            # Calculate overall extraction quality
+            extraction_values = [c for c in extraction_confidence.values() if c > 0]
+            if extraction_values:
+                avg_extraction_quality = sum(extraction_values) / len(extraction_values)
+                log_output.append(f"\nOverall extraction quality: {avg_extraction_quality:.2f}%")
             
             # Generate outputs with proper serialization
             summary = invoice_summary(invoice)

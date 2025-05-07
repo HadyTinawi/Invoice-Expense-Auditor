@@ -3,10 +3,10 @@ python-dotenv>=1.0.0
 pydantic>=2.0.0
 
 # OCR Processing
-pytesseract>=0.3.10
-Pillow>=10.0.0
-pdf2image>=1.16.3
-boto3>=1.28.0  # For AWS Textract integration
+pytesseract==0.3.10
+Pillow==9.5.0
+pdf2image==1.16.3
+boto3==1.26.135
 
 # Agent Framework
 langchain>=0.0.267
@@ -16,8 +16,11 @@ langgraph>=0.0.15
 openai>=1.0.0
 
 # Data Processing
-pandas>=2.0.0
-numpy>=1.24.0
+pandas==2.0.1
+numpy==1.24.3
+scikit-learn==1.2.2
+python-dateutil==2.8.2
+requests==2.30.0
 
 # Web Interface
 streamlit>=1.24.0
@@ -31,4 +34,18 @@ pytest>=7.3.1
 pytest-cov>=4.1.0
 
 # Utilities
-tqdm>=4.65.0
+tqdm==4.65.0
+
+# Added from the code block
+gradio==3.32.0
+langdetect==1.0.9
+transformers==4.27.2
+watchdog==3.0.0
+spacy==3.5.2
+jsonschema==4.17.3
+fastapi==0.95.1
+uvicorn==0.22.0
+python-multipart==0.0.6
+
+# Added from the code block
+opencv-python==4.7.0.72

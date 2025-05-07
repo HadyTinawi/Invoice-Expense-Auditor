@@ -11,6 +11,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Dict, Any, List, Optional, Union
 import logging
+import re
 
 from .invoice import Invoice, LineItem, VendorInfo
 
@@ -118,8 +119,49 @@ def ocr_data_to_invoice(ocr_data: Dict[str, Any], source_file: Optional[str] = N
     
     vendor = VendorInfo(name=vendor_name)
     
-    # Extract date with fallback to current date
+    # Extract date with better fallbacks
     issue_date = ocr_data.get('date')
+    
+    # Enhanced date extraction with multiple fallbacks
+    if not issue_date:
+        # Try alternative keys that might contain the date
+        for date_key in ['invoice_date', 'issue_date', 'issued_date', 'document_date']:
+            if date_key in ocr_data and ocr_data[date_key]:
+                issue_date = ocr_data[date_key]
+                logger.info(f"Found date in alternative field '{date_key}': {issue_date}")
+                break
+        
+        # Try to extract date from invoice number if it follows a pattern like INV-YYYYMMDD
+        if not issue_date and invoice_id:
+            date_in_id_match = re.search(r'(\d{8}|\d{6}|\d{4}-\d{2}-\d{2}|\d{2}-\d{2}-\d{4})', invoice_id)
+            if date_in_id_match:
+                potential_date = date_in_id_match.group(1)
+                logger.info(f"Extracted potential date from invoice ID: {potential_date}")
+                issue_date = potential_date
+    
+    if not issue_date:
+        # If still no date, check raw text for date patterns
+        if 'raw_text' in ocr_data and ocr_data['raw_text']:
+            # Look for common date patterns in raw text
+            date_patterns = [
+                r'\b(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4})\b',  # 01/31/2022, 31-01-2022
+                r'\b(\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2})\b',    # 2022/01/31, 2022-01-31
+                r'\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b',
+                r'\b\d{1,2}(?:st|nd|rd|th)?\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?),?\s+\d{4}\b'
+            ]
+            
+            raw_text = ocr_data['raw_text']
+            for pattern in date_patterns:
+                matches = re.findall(pattern, raw_text)
+                if matches:
+                    issue_date = matches[0]
+                    if isinstance(issue_date, tuple):
+                        issue_date = issue_date[0]
+                    logger.info(f"Extracted date from raw text: {issue_date}")
+                    break
+    
+    # If we still don't have a date, use current date as fallback
+    # This avoids the error and allows processing to continue
     if not issue_date:
         logger.warning("Invoice date not found in OCR data. Using current date as fallback.")
         issue_date = datetime.now().date().isoformat()
