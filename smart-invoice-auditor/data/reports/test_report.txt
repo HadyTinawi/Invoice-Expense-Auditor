@@ -1,0 +1,55 @@
+================================================================================
+INVOICE AUDIT REPORT
+================================================================================
+Generated: 2025-05-07 13:32:44
+
+INVOICE INFORMATION
+--------------------------------------------------------------------------------
+Invoice ID: INV-2023-005
+Vendor: Tech Solutions Ltd.
+Date: 2023-07-15
+Total: $2450.00
+
+AUDIT SUMMARY
+--------------------------------------------------------------------------------
+Found 2 issues in invoice INV-2023-005 (1 high, 1 medium, 0 low priority). Recommend review at earliest convenience.
+
+RULE-BASED AUDIT RESULTS
+--------------------------------------------------------------------------------
+Total Rules: 7
+Passed Rules: 5
+Failed Rules: 2
+
+DETAILED ISSUES
+--------------------------------------------------------------------------------
+Found 2 issues:
+
+ISSUE 1: Total Calculation Error
+Severity: MEDIUM
+Source: rule_engine
+Description: Total ($2450.00) doesn't match subtotal ($2250.00) + tax ($200.00) = $2450.00
+
+Explanation:
+The invoice total doesn't match the sum of subtotal and tax. This could indicate
+a calculation error, intentional manipulation, or a simple mistake in
+arithmetic.
+
+Recommendation:
+Verify all calculations and request a corrected invoice if necessary.
+--------------------------------------------------------------------------------
+ISSUE 2: Item Price Limit Exceeded
+Severity: HIGH
+Source: rule_engine
+Description: Line items exceed maximum price for their category: Premium Software License ($1200.00 > $400.00)
+
+Explanation:
+One or more items exceed the maximum allowed price for their category. This
+could indicate premium purchases that require special approval.
+
+Recommendation:
+Verify if the items with excessive prices were authorized and if they represent
+the best value for the organization.
+--------------------------------------------------------------------------------
+
+End of Report
+================================================================================

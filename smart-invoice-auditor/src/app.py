@@ -21,6 +21,7 @@ from src.ocr.processor import create_processor
 from src.agent.auditor import AuditorAgent
 from src.policy.manager import PolicyManager
 from src.audit.rules import RuleEngine, create_default_rule_sets
+from src.reporting.report_generator import generate_report, ReportFormat
 
 
 # Set page configuration
@@ -216,6 +217,56 @@ def display_results(audit_results):
         file_name="audit_results.json",
         mime="application/json"
     )
+    
+    # Report generation options
+    st.subheader("Generate Detailed Report")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        report_format = st.selectbox(
+            "Report Format",
+            options=["text", "html", "json"],
+            index=1,  # Default to HTML
+            format_func=lambda x: {"text": "Plain Text", "html": "HTML", "json": "JSON"}[x]
+        )
+    
+    # Generate report button
+    if st.button("Generate Report"):
+        try:
+            # Generate report
+            format_enum = ReportFormat(report_format)
+            report = generate_report(audit_results, format_enum)
+            
+            # Determine file extension and mime type
+            file_ext = {"text": "txt", "html": "html", "json": "json"}[report_format]
+            mime_type = {"text": "text/plain", "html": "text/html", "json": "application/json"}[report_format]
+            
+            # Offer download
+            st.download_button(
+                label=f"Download {file_ext.upper()} Report",
+                data=report,
+                file_name=f"invoice_audit_report.{file_ext}",
+                mime=mime_type,
+                key="report_download"
+            )
+            
+            # Preview for HTML reports
+            if report_format == "html":
+                with st.expander("Preview HTML Report"):
+                    st.components.v1.html(report, height=500, scrolling=True)
+            
+            # Preview for text reports
+            elif report_format == "text":
+                with st.expander("Preview Text Report"):
+                    st.text(report)
+            
+            # Preview for JSON reports
+            elif report_format == "json":
+                with st.expander("Preview JSON Report"):
+                    st.json(json.loads(report))
+                    
+        except Exception as e:
+            st.error(f"Error generating report: {str(e)}")
 
 
 def main():
