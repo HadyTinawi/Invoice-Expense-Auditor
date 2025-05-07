@@ -66,7 +66,7 @@ class AuditorTools:
         
         return result
     
-    def check_policy_compliance(self, expense_category: str, amount: float, 
+    def check_policy_compliance(self, expense_category: str, amount: float,
                                policy_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Check if an expense complies with policy
@@ -79,42 +79,76 @@ class AuditorTools:
         Returns:
             Result with compliance status and explanation
         """
+        from src.policy import PolicyManager, PolicyRule
+        
         if not policy_data:
             return {
                 "complies": True,
                 "reason": "No policy data available for compliance check"
             }
         
-        # Check category
+        # Create a simplified invoice for checking
+        invoice_data = {
+            "invoice_id": "CHECK-ITEM",
+            "vendor": "CHECK-VENDOR",
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "total": amount,
+            "line_items": [
+                {
+                    "description": "Item being checked",
+                    "category": expense_category,
+                    "quantity": 1,
+                    "price": amount
+                }
+            ]
+        }
+        
+        # Create a temporary policy manager
+        policy_manager = PolicyManager()
+        
+        # Create rules from policy data
+        rules = []
+        
+        # Rule for allowed categories
         if "allowed_categories" in policy_data:
-            allowed_categories = [c.lower() for c in policy_data["allowed_categories"]]
-            if expense_category.lower() not in allowed_categories:
+            rules.append(PolicyRule(
+                rule_id="check_allowed_categories",
+                rule_type="allowed_categories",
+                parameters={"allowed_categories": policy_data["allowed_categories"]},
+                description="Allowed expense categories",
+                severity="medium"
+            ))
+        
+        # Rule for max item prices
+        if "max_item_prices" in policy_data:
+            rules.append(PolicyRule(
+                rule_id="check_max_item_price",
+                rule_type="max_item_price",
+                parameters={"max_item_prices": policy_data["max_item_prices"]},
+                description="Maximum prices by category",
+                severity="medium"
+            ))
+        
+        # Rule for max amount
+        if "max_amount" in policy_data:
+            rules.append(PolicyRule(
+                rule_id="check_max_amount",
+                rule_type="max_amount",
+                parameters={"max_amount": policy_data["max_amount"]},
+                description="Maximum invoice amount",
+                severity="high"
+            ))
+        
+        # Check each rule
+        for rule in rules:
+            violation = rule.check(invoice_data)
+            if violation:
                 return {
                     "complies": False,
-                    "reason": f"Category '{expense_category}' is not in the allowed categories: {', '.join(policy_data['allowed_categories'])}",
-                    "severity": "medium",
-                    "violation_type": "unauthorized_category"
+                    "reason": violation.description,
+                    "severity": violation.severity,
+                    "violation_type": rule.rule_type
                 }
-        
-        # Check amount limits
-        if "max_item_prices" in policy_data and expense_category.lower() in policy_data["max_item_prices"]:
-            max_amount = policy_data["max_item_prices"][expense_category.lower()]
-            if amount > max_amount:
-                return {
-                    "complies": False,
-                    "reason": f"Amount ${amount:.2f} exceeds maximum ${max_amount:.2f} for category '{expense_category}'",
-                    "severity": "medium",
-                    "violation_type": "exceeds_category_limit"
-                }
-        
-        # Check total invoice limit
-        if "max_amount" in policy_data and amount > float(policy_data["max_amount"]):
-            return {
-                "complies": False,
-                "reason": f"Amount ${amount:.2f} exceeds policy maximum ${float(policy_data['max_amount']):.2f}",
-                "severity": "high",
-                "violation_type": "exceeds_total_limit"
-            }
         
         return {
             "complies": True,

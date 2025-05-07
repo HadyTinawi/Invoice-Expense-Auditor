@@ -28,6 +28,9 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from typing import TypedDict, Annotated, Sequence
 
+# Local imports
+from src.policy import PolicyManager, PolicyRule, PolicyViolation
+
 
 # Define the state schema for the audit graph
 class AuditState(TypedDict):
@@ -51,6 +54,7 @@ class AuditorAgent:
         self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
         self.tools = self._create_tools()
         self.agent_executor = self._setup_agent()
+        self.policy_manager = PolicyManager()
     
     def _get_llm(self) -> BaseChatModel:
         """Get the language model based on configuration"""
@@ -264,56 +268,28 @@ class AuditorAgent:
         return issues
     
     def _check_policy_compliance(self, invoice_data: Dict[str, Any], policy_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Check for policy compliance issues using rule-based approach"""
+        """Check for policy compliance issues using enhanced policy manager"""
         issues = []
         
         # Skip if no policy data
         if not policy_data:
             return []
         
-        # Check total amount against policy maximum
-        if "max_amount" in policy_data:
-            max_amount = float(policy_data["max_amount"])
-            total = invoice_data.get("total", 0.0)
-            
-            if total > max_amount:
+        # Get vendor name
+        vendor_name = invoice_data.get("vendor", "UNKNOWN")
+        
+        # Use the policy manager to check compliance
+        compliance_result = self.policy_manager.check_invoice_compliance(invoice_data, vendor_name)
+        
+        # Convert policy violations to issues
+        if not compliance_result["compliant"]:
+            for violation in compliance_result["violations"]:
                 issues.append({
-                    "type": "Exceeds Maximum Amount",
-                    "description": f"Invoice total (${total:.2f}) exceeds policy maximum (${max_amount:.2f})",
-                    "severity": "high",
-                    "source": "rule_based"
+                    "type": f"Policy Violation: {violation['rule_id']}",
+                    "description": violation["description"],
+                    "severity": violation["severity"],
+                    "source": "policy_manager"
                 })
-        
-        # Check line items against policy
-        line_items = invoice_data.get("line_items", [])
-        if line_items and "allowed_categories" in policy_data:
-            allowed_categories = policy_data["allowed_categories"]
-            
-            for item in line_items:
-                category = item.get("category", "").lower()
-                if category and category not in [c.lower() for c in allowed_categories]:
-                    issues.append({
-                        "type": "Unauthorized Category",
-                        "description": f"Line item '{item.get('description', 'Unknown')}' has unauthorized category '{category}'",
-                        "severity": "medium",
-                        "source": "rule_based"
-                    })
-        
-        # Check for per-item maximum prices
-        if line_items and "max_item_prices" in policy_data:
-            max_prices = policy_data["max_item_prices"]
-            
-            for item in line_items:
-                category = item.get("category", "").lower()
-                price = item.get("price", 0.0)
-                
-                if category in max_prices and price > max_prices[category]:
-                    issues.append({
-                        "type": "Item Price Exceeds Maximum",
-                        "description": f"Item '{item.get('description', 'Unknown')}' price (${price:.2f}) exceeds maximum for category '{category}' (${max_prices[category]:.2f})",
-                        "severity": "medium",
-                        "source": "rule_based"
-                    })
         
         return issues
     
@@ -394,20 +370,50 @@ class AuditorAgent:
     
     def _tool_check_policy_compliance(self, expense_category: str, amount: float, policy_data: Dict[str, Any]) -> str:
         """Tool for checking if an expense complies with policy"""
-        if not policy_data:
-            return "No policy data available for compliance check."
+        # Create a simplified invoice for checking
+        invoice_data = {
+            "invoice_id": "TOOL-CHECK",
+            "vendor": "TOOL-VENDOR",
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "total": amount,
+            "line_items": [
+                {
+                    "description": "Item being checked",
+                    "category": expense_category,
+                    "quantity": 1,
+                    "price": amount
+                }
+            ]
+        }
         
-        # Check category
+        # Create temporary policy rules
+        rules = []
+        
+        # Rule for allowed categories
         if "allowed_categories" in policy_data:
-            allowed_categories = [c.lower() for c in policy_data["allowed_categories"]]
-            if expense_category.lower() not in allowed_categories:
-                return f"POLICY VIOLATION: Category '{expense_category}' is not in the allowed categories: {', '.join(policy_data['allowed_categories'])}"
+            rules.append(PolicyRule(
+                rule_id="check_allowed_categories",
+                rule_type="allowed_categories",
+                parameters={"allowed_categories": policy_data["allowed_categories"]},
+                description="Allowed expense categories",
+                severity="medium"
+            ))
         
-        # Check amount limits
-        if "max_item_prices" in policy_data and expense_category.lower() in policy_data["max_item_prices"]:
-            max_amount = policy_data["max_item_prices"][expense_category.lower()]
-            if amount > max_amount:
-                return f"POLICY VIOLATION: Amount ${amount:.2f} exceeds maximum ${max_amount:.2f} for category '{expense_category}'"
+        # Rule for max item prices
+        if "max_item_prices" in policy_data:
+            rules.append(PolicyRule(
+                rule_id="check_max_item_price",
+                rule_type="max_item_price",
+                parameters={"max_item_prices": policy_data["max_item_prices"]},
+                description="Maximum prices by category",
+                severity="medium"
+            ))
+        
+        # Check each rule
+        for rule in rules:
+            violation = rule.check(invoice_data)
+            if violation:
+                return f"POLICY VIOLATION: {violation.description}"
         
         return f"Expense complies with policy for category '{expense_category}' and amount ${amount:.2f}"
     
