@@ -11,6 +11,8 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Union
 import json
 
+from .duplicate_detector import DuplicateDetector
+
 
 class AuditorTools:
     """Collection of tools for invoice auditing"""
@@ -23,6 +25,7 @@ class AuditorTools:
             invoice_history: Dictionary of previously processed invoices for duplicate detection
         """
         self.invoice_history = invoice_history or {}
+        self.duplicate_detector = DuplicateDetector(invoice_history)
     
     def check_duplicate(self, invoice_id: str, vendor: str, amount: float, date: str) -> Dict[str, Any]:
         """
@@ -37,29 +40,31 @@ class AuditorTools:
         Returns:
             Result with detection status and explanation
         """
-        for stored_id, stored_invoice in self.invoice_history.items():
-            if stored_id == invoice_id:
-                return {
-                    "is_duplicate": True,
-                    "reason": f"Invoice ID {invoice_id} already exists in the system",
-                    "severity": "high",
-                    "matched_invoice_id": stored_id
-                }
-            
-            if (stored_invoice.get("vendor") == vendor and 
-                abs(stored_invoice.get("total", 0.0) - amount) < 0.01 and
-                stored_invoice.get("date") == date):
-                return {
-                    "is_duplicate": True,
-                    "reason": f"Very similar to invoice {stored_id} with same vendor, amount, and date",
-                    "severity": "high",
-                    "matched_invoice_id": stored_id
-                }
-        
-        return {
-            "is_duplicate": False,
-            "reason": "No duplicates found"
+        # Create a simplified invoice data structure for checking
+        invoice_data = {
+            "invoice_id": invoice_id,
+            "vendor": vendor,
+            "total": amount,
+            "date": date
         }
+        
+        # Use the duplicate detector for comprehensive checking
+        result = self.duplicate_detector.check_duplicate(invoice_data)
+        
+        # Add severity information if it's a duplicate
+        if result["is_duplicate"]:
+            result["severity"] = "high"
+            
+            # Add additional context based on confidence
+            confidence = result.get("confidence", 1.0)
+            if confidence >= 0.95:
+                result["severity"] = "high"
+            elif confidence >= 0.85:
+                result["severity"] = "medium"
+            else:
+                result["severity"] = "low"
+        
+        return result
     
     def check_policy_compliance(self, expense_category: str, amount: float, 
                                policy_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -218,18 +223,8 @@ class AuditorTools:
         Returns:
             Hash string for the invoice
         """
-        # Create a string representation of key invoice data
-        hash_input = (
-            f"{invoice_data.get('invoice_id', '')}-"
-            f"{invoice_data.get('vendor', '')}-"
-            f"{invoice_data.get('total', 0.0)}-"
-            f"{invoice_data.get('date', '')}"
-        )
-        
-        # Generate hash
-        hash_value = hashlib.md5(hash_input.encode()).hexdigest()
-        
-        return hash_value
+        # Use the duplicate detector's hash generation method
+        return self.duplicate_detector.generate_invoice_hash(invoice_data)
     
     def extract_vendor_info(self, invoice_data: Dict[str, Any]) -> Dict[str, Any]:
         """

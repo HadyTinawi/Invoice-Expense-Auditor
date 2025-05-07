@@ -9,6 +9,7 @@ from .auditor import AuditorAgent, AuditGraph
 from .tools import AuditorTools
 from .memory import InvoiceMemory, AuditMemory, create_conversation_memory
 from .workflow import AuditWorkflow
+from .duplicate_detector import DuplicateDetector
 
 __all__ = [
     'AuditorAgent',
@@ -17,5 +18,6 @@ __all__ = [
     'InvoiceMemory',
     'AuditMemory',
     'create_conversation_memory',
-    'AuditWorkflow'
+    'AuditWorkflow',
+    'DuplicateDetector'
 ]
