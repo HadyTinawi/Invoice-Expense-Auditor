@@ -33,7 +33,7 @@ def process_invoice(invoice_path: str, policy_path: Optional[str] = None,
     Process and audit an invoice
     
     Args:
-        invoice_path: Path to the invoice PDF
+        invoice_path: Path to the invoice PDF or image file
         policy_path: Path to the policy file (optional)
         ocr_engine: OCR engine to use (tesseract or textract)
         output_path: Path to save the audit results (optional)
@@ -46,14 +46,23 @@ def process_invoice(invoice_path: str, policy_path: Optional[str] = None,
         console.print(f"[bold red]Error:[/bold red] Invoice file not found: {invoice_path}")
         sys.exit(1)
     
+    # Check file type
+    file_ext = os.path.splitext(invoice_path)[1].lower()
+    supported_extensions = ['.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif']
+    if file_ext not in supported_extensions:
+        console.print(f"[bold red]Error:[/bold red] Unsupported file format: {file_ext}")
+        console.print(f"Supported formats: {', '.join(supported_extensions)}")
+        sys.exit(1)
+    
     # Create OCR processor
     console.print(f"Creating OCR processor ({ocr_engine})...")
     ocr_processor = create_processor(ocr_engine)
     
     # Process invoice
     console.print(f"Processing invoice: {invoice_path}")
-    with console.status("[bold green]Extracting data from invoice...[/bold green]"):
-        invoice_data = ocr_processor.process_pdf(invoice_path)
+    with console.status(f"[bold green]Extracting data from {file_ext} file...[/bold green]"):
+        # Use process_file instead of process_pdf to support both PDF and image files
+        invoice_data = ocr_processor.process_file(invoice_path)
     
     # Load policy data
     policy_manager = PolicyManager()
@@ -167,26 +176,40 @@ def display_results(audit_results: Dict[str, Any]):
 
 def run_demo():
     """Run a demo with sample data"""
-    # Get the path to the sample invoice
+    # Get the path to the sample invoice directory
     sample_invoice_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
-                                     "data", "invoices")
+                                    "samples")
     sample_policy_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
                                     "data", "policies")
     
     # Check if sample data exists
     if not os.path.exists(sample_invoice_dir) or not os.listdir(sample_invoice_dir):
-        console.print("[bold red]Error:[/bold red] No sample invoices found in data/invoices directory.")
+        console.print("[bold red]Error:[/bold red] No sample files found in samples directory.")
         sys.exit(1)
     
-    # Get the first sample invoice
-    sample_invoice = os.path.join(sample_invoice_dir, os.listdir(sample_invoice_dir)[0])
+    # Try to find sample files with supported extensions
+    sample_files = []
+    for filename in os.listdir(sample_invoice_dir):
+        if filename.endswith(('.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.bmp')):
+            sample_files.append(os.path.join(sample_invoice_dir, filename))
+    
+    if not sample_files:
+        console.print("[bold red]Error:[/bold red] No sample invoice files (PDF or images) found in samples directory.")
+        sys.exit(1)
+    
+    # Look for a PNG file first, then fall back to PDF or other formats
+    sample_png = next((f for f in sample_files if f.endswith('.png')), None)
+    sample_pdf = next((f for f in sample_files if f.endswith('.pdf')), None)
+    
+    # Select the sample file to use, prioritizing PNG if available
+    sample_invoice = sample_png or sample_pdf or sample_files[0]
     
     # Get the first sample policy if available
     sample_policy = None
     if os.path.exists(sample_policy_dir) and os.listdir(sample_policy_dir):
         sample_policy = os.path.join(sample_policy_dir, os.listdir(sample_policy_dir)[0])
     
-    console.print(f"[bold]Running demo with sample invoice:[/bold] {sample_invoice}")
+    console.print(f"[bold]Running demo with sample file:[/bold] {sample_invoice}")
     if sample_policy:
         console.print(f"[bold]Using sample policy:[/bold] {sample_policy}")
     
@@ -201,7 +224,7 @@ def main():
     """Main entry point for the CLI"""
     parser = argparse.ArgumentParser(description="Smart Invoice Auditor - Detect billing errors and policy violations")
     
-    parser.add_argument("--invoice", "-i", type=str, help="Path to the invoice PDF file")
+    parser.add_argument("--invoice", "-i", type=str, help="Path to the invoice file (PDF, PNG, JPG, TIFF, etc.)")
     parser.add_argument("--policy", "-p", type=str, help="Path to the policy file (CSV or JSON)")
     parser.add_argument("--ocr", "-o", type=str, choices=["tesseract", "textract"], default="tesseract",
                         help="OCR engine to use (default: tesseract)")

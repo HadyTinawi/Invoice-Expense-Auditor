@@ -1,0 +1,38 @@
+{
+  "vendor": "Acme Corporation",
+  "rules": [
+    {
+      "type": "expense_limit",
+      "category": "office_supplies",
+      "max_amount": 500.00,
+      "description": "Office supplies expenses should not exceed $500 per invoice"
+    },
+    {
+      "type": "expense_limit",
+      "category": "software",
+      "max_amount": 2000.00,
+      "description": "Software expenses should not exceed $2000 per invoice"
+    },
+    {
+      "type": "expense_limit",
+      "category": "hardware",
+      "max_amount": 3000.00,
+      "description": "Hardware expenses should not exceed $3000 per invoice"
+    },
+    {
+      "type": "forbidden_category",
+      "category": "entertainment",
+      "description": "Entertainment expenses are not allowed"
+    },
+    {
+      "type": "date_rule",
+      "max_days_old": 90,
+      "description": "Invoices should not be more than 90 days old"
+    },
+    {
+      "type": "tax_rate",
+      "rate": 0.08,
+      "description": "Tax rate should be 8%"
+    }
+  ]
+} 
