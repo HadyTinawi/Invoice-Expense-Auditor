@@ -1,0 +1,173 @@
+<context>
+# Overview
+The Smart Invoice & Expense Auditor is an AI-powered solution that automates the detection of billing errors, duplicate charges, and policy violations in invoice PDFs. This system combines OCR technology with intelligent agent-based auditing to reduce manual review time and improve accuracy in expense management.
+
+# Core Features
+1. PDF Invoice Processing
+   - Allows users to upload and process invoice PDFs through a simple interface
+   - Supports various invoice formats and layouts
+   - Handles batch processing of multiple invoices
+
+2. Intelligent OCR
+   - Extracts structured data from unstructured invoice documents
+   - Identifies key fields like invoice numbers, dates, amounts, and line items
+   - Maintains high accuracy across different document formats
+
+3. Policy Compliance Checking
+   - Automatically verifies charges against company expense policies
+   - Flags items exceeding authorized spending limits
+   - Identifies disallowed expense categories
+
+4. Duplicate Detection
+   - Flags repeated invoice IDs and potential double-billing
+   - Uses fuzzy matching to identify similar invoices with slight variations
+   - Maintains a database of previously processed invoices for comparison
+
+5. Detailed Audit Reports
+   - Generates clear explanations for all flagged issues
+   - Provides severity ratings for detected problems
+   - Offers recommendations for resolution
+</context>
+<PRD>
+# Technical Architecture
+## System Components
+1. OCR Module
+   - Implements either Tesseract.js or AWS Textract
+   - Pre-processes documents for improved extraction accuracy
+   - Extracts text and structures it into consistent JSON format
+
+2. Agent-Based Audit System
+   - Uses LangChain/LangGraph for reasoning over extracted data
+   - Implements various audit tools for policy compliance, duplicate detection, etc.
+   - Provides explanations for flagged issues
+
+3. Policy Management System
+   - Stores and manages expense policies in structured format
+   - Supports CSV/TXT data (static or scraped with Firecrawl MCP)
+   - Allows for policy updates and versioning
+
+4. Interface Layer
+   - CLI interface for basic operations
+   - Optional Streamlit web interface for more user-friendly operations
+   - API endpoints for potential integration with other systems
+
+## Data Models
+1. Invoice Schema
+   - Vendor information (name, address, tax ID)
+   - Invoice metadata (ID, date, due date)
+   - Line items (description, category, quantity, price)
+   - Totals (subtotal, tax, total amount)
+
+2. Policy Schema
+   - Expense categories (allowed/disallowed)
+   - Spending limits (by category, by invoice)
+   - Approval requirements (by amount threshold)
+
+3. Audit Results Schema
+   - Issue type (duplicate, policy violation, calculation error)
+   - Severity (high, medium, low)
+   - Description and explanation
+   - Recommendation for resolution
+
+# Development Roadmap
+## MVP (Minimum Viable Product)
+1. Basic OCR Pipeline
+   - PDF text extraction using Tesseract.js
+   - Structured data extraction for standard invoice formats
+   - Error handling for poor quality documents
+
+2. Core Audit Logic
+   - Basic duplicate detection by invoice ID
+   - Simple policy compliance checking against CSV rules
+   - Calculation verification (subtotal + tax = total)
+
+3. Command Line Interface
+   - Process single invoice with path argument
+   - Output results to console or JSON file
+   - Basic configuration options
+
+## Phase 2: Enhanced Features
+1. Advanced OCR Capabilities
+   - Support for more complex invoice layouts
+   - Improved accuracy through ML-based field recognition
+   - Batch processing capabilities
+
+2. Expanded Audit Functionality
+   - Fuzzy matching for sophisticated duplicate detection
+   - Multi-factor policy analysis
+   - Historical trend analysis
+
+3. Simple Web Interface
+   - Streamlit-based upload and results display
+   - Basic dashboard for audit statistics
+   - PDF annotation with issue highlights
+
+## Phase 3: Full Solution
+1. Comprehensive Policy Management
+   - GUI for policy creation and editing
+   - Policy version control
+   - Automatic policy updates from vendor systems
+
+2. Integration Capabilities
+   - API for external system integration
+   - Webhook notifications for detected issues
+   - Export capabilities for accounting systems
+
+3. Advanced Reporting
+   - Detailed audit trails and history
+   - Vendor performance analytics
+   - Cost-saving opportunity identification
+
+# Logical Dependency Chain
+1. Foundation Components
+   - OCR and text extraction from PDFs must be completed first
+   - Basic data structures for invoice representation
+   - Simple policy rule implementation
+
+2. Core Functionality Path
+   - Command line processing of single invoices
+   - Basic audit checks implementation
+   - Integration of audit components with extraction
+
+3. Enhancement Path
+   - Improved accuracy of extraction and detection
+   - Web interface implementation
+   - Expanded policy management
+   - Advanced detection algorithms
+
+# Risks and Mitigations
+## Technical Challenges
+1. OCR Accuracy
+   - Risk: Poor extraction quality from diverse invoice formats
+   - Mitigation: Implement pre-processing steps, use multiple OCR engines, manual override capability
+
+2. False Positives/Negatives
+   - Risk: System flags legitimate expenses or misses violations
+   - Mitigation: Adjustable confidence thresholds, continuous learning from feedback
+
+3. Scalability
+   - Risk: Performance degradation with large invoice volumes
+   - Mitigation: Efficient algorithms, batch processing, caching strategies
+
+## MVP Strategy
+1. Focus on Core Value
+   - Begin with the most common invoice formats and policy violations
+   - Prioritize accuracy over comprehensiveness initially
+   - Get early feedback on detection quality
+
+2. Incremental Deployment
+   - Start with CLI tool for technical users
+   - Add web interface after core functionality is solid
+   - Integrate with existing systems gradually
+
+# Appendix
+## Vendor Policy Examples
+- Travel expenses: Maximum $200 per night for hotels
+- Meals: Per diem of $75 in high-cost cities, $50 elsewhere
+- Technology: Purchase approval required for items over $500
+
+## Detection Method Examples
+- Duplicate Invoice: Hash comparison + invoice ID tracking
+- Price Mismatch: Policy lookup + numerical comparison
+- Policy Violation: Rule-based threshold checking
+</PRD> 
