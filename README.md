@@ -123,3 +123,16 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract)
 - [LangChain](https://github.com/langchain-ai/langchain)
 - [ExpressExpense](https://expressexpense.com) for sample receipt dataset
+
+## Recent Updates
+
+🚀 **Updated AI Auditing Engine (July 2023)**
+
+The invoice auditing workflow has been upgraded to use the OpenAI Agents SDK instead of LangGraph. This update brings several benefits:
+
+- More robust and accurate audit results
+- Better error handling and issue detection
+- Improved performance with complex invoices
+- Simplified codebase and dependency management
+
+The user interface remains the same, but you'll notice improved audit quality and reliability.

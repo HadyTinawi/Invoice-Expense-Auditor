@@ -1,0 +1,26 @@
+{
+  "invoice_id": "INV12345",
+  "vendor": {
+    "name": "Test Vendor",
+    "address": "123 Test Street, Test City, TS 12345",
+    "phone": "555-123-4567",
+    "email": "contact@testvendor.com"
+  },
+  "issue_date": "2023-07-15",
+  "due_date": "2023-08-15",
+  "total": 100.0,
+  "subtotal": 90.0,
+  "tax": 10.0,
+  "currency": "USD",
+  "line_items": [
+    {
+      "description": "Test Product",
+      "quantity": 1,
+      "unit_price": 90.0,
+      "amount": 90.0,
+      "category": "general"
+    }
+  ],
+  "payment_terms": "Net 30",
+  "raw_text": "Sample invoice text for OCR testing"
+} 

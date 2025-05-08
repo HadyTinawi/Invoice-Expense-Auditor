@@ -23,8 +23,10 @@ opencv-python>=4.7.0.0
 requests>=2.31.0
 
 # LLM and Agent functionality
+openai>=1.21.0
+agents>=0.0.14  # OpenAI Agents SDK
+pydantic>=2.4.0
+
+# Keeping LangChain for utility functions, but removing LangGraph
 langchain>=0.1.0
 langchain-openai>=0.0.5
-langchain-community>=0.0.10
-langgraph>=0.0.20
-pydantic>=2.4.0

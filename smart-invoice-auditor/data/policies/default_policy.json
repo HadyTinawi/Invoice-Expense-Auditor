@@ -1,0 +1,16 @@
+{
+  "vendor": "Default",
+  "expense_limits": {
+    "general": 1000,
+    "office_supplies": 500,
+    "travel": 2000,
+    "meals": 100,
+    "software": 1500
+  },
+  "allowed_categories": ["general", "office_supplies", "travel", "meals", "software"],
+  "excluded_items": ["alcohol", "entertainment", "gift cards"],
+  "require_receipts_over": 50,
+  "max_amount": 5000,
+  "payment_terms": "Net 30",
+  "approval_required_over": 1000
+} 
