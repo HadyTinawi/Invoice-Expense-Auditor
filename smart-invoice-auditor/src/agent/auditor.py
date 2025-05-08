@@ -596,40 +596,19 @@ class AuditGraph:
                 "complete": True
             }
         
-        # 5. Decision node to determine next step
-        def decide_next_step(state: AuditState) -> str:
-            """Decide the next step in the workflow"""
-            if not state["next_steps"]:
-                return "generate_summary"
-            
-            # Get the next step
-            next_step = state["next_steps"][0]
-            remaining_steps = state["next_steps"][1:]
-            
-            # Update the state
-            state["next_steps"] = remaining_steps
-            
-            if next_step == "check_duplicate":
-                return "check_duplicate"
-            elif next_step == "check_policy_compliance":
-                return "check_policy_compliance"
-            elif next_step == "verify_calculations":
-                return "verify_calculations"
-            else:
-                return "detect_issues"
-        
         # Add nodes to the graph
         workflow.add_node("initial_analysis", initial_analysis)
         workflow.add_node("tool_node", tool_node)
         workflow.add_node("detect_issues", detect_issues)
         workflow.add_node("generate_summary", generate_summary)
         
-        # Add edges
-        workflow.add_edge("initial_analysis", decide_next_step)
-        workflow.add_edge("check_duplicate", "detect_issues")
-        workflow.add_edge("check_policy_compliance", "detect_issues")
-        workflow.add_edge("verify_calculations", "detect_issues")
-        workflow.add_edge("detect_issues", decide_next_step)
+        # Set the entry point for the workflow
+        workflow.set_entry_point("initial_analysis")
+        
+        # Add edges in a linear flow
+        workflow.add_edge("initial_analysis", "tool_node")
+        workflow.add_edge("tool_node", "detect_issues")
+        workflow.add_edge("detect_issues", "generate_summary")
         workflow.add_edge("generate_summary", END)
         
         # Compile the graph

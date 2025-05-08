@@ -1,0 +1,38 @@
+feat(ocr): enhance invoice data extraction and serialization
+
+Implemented significant improvements to OCR processing and data handling:
+
+1. Enhanced OCR Text Extraction:
+   - Added robust date extraction with support for multiple formats
+   - Implemented fallback mechanisms for missing fields
+   - Added debugging information to track processed text
+   - Improved confidence scoring for extraction quality
+
+2. Fixed JSON Serialization:
+   - Added to_dict() methods to VendorInfo and LineItem classes
+   - Updated Invoice serialization to properly handle nested objects
+   - Fixed Decimal and date serialization for proper JSON output
+   - Added error handling for serialization failures
+
+3. Added Date Normalization:
+   - Created _normalize_date_format utility to standardize dates
+   - Added support for text-based months, numeric dates, and various separators
+   - Implemented fallback to current date when extraction fails
+
+4. Improved Error Handling:
+   - Enhanced logging throughout the OCR pipeline
+   - Added detailed error messages for troubleshooting
+   - Implemented graceful fallbacks for critical failures
+
+5. Web UI Improvements:
+   - Created a Gradio-based interface for testing OCR functionality
+   - Added processing log output for debugging
+   - Displayed structured JSON data alongside extracted text
+   - Added examples for quick testing
+
+6. Documentation:
+   - Added comprehensive usage guide in README_OCR_USAGE.md
+   - Documented troubleshooting steps for common issues
+
+These improvements significantly enhance the reliability of invoice data extraction
+and make the system more robust for handling various invoice formats and layouts. 

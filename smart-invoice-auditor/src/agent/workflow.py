@@ -324,24 +324,24 @@ class AuditWorkflow:
         workflow.add_node("ai_analysis", ai_analysis)
         workflow.add_node("generate_summary", generate_summary)
         
-        # Add conditional edges
-        workflow.add_conditional_edges(
-            "initial_analysis",
-            decide_next_step,
-            {
-                "check_duplicate": "tool_node",
-                "check_policy_compliance": "tool_node",
-                "verify_calculations": "tool_node",
-                "check_date_validity": "tool_node",
-                "analyze_line_items": "tool_node",
-                "ai_analysis": "ai_analysis"
-            }
-        )
+        # Define the workflow structure
         
-        # Add regular edges
+        # First, add the entry point
+        workflow.set_entry_point("initial_analysis")
+        
+        # Add edge from initial_analysis to tool_node
+        workflow.add_edge("initial_analysis", "tool_node")
+        
+        # Add edge from tool_node to detect_issues
         workflow.add_edge("tool_node", "detect_issues")
-        workflow.add_edge("detect_issues", decide_next_step)
+        
+        # Add edge from detect_issues to ai_analysis
+        workflow.add_edge("detect_issues", "ai_analysis")
+        
+        # Add edge from ai_analysis to generate_summary
         workflow.add_edge("ai_analysis", "generate_summary")
+        
+        # Add edge from generate_summary to END
         workflow.add_edge("generate_summary", END)
         
         # Compile the graph

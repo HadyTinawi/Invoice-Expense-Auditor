@@ -21,3 +21,10 @@ opencv-python>=4.7.0.0
 
 # Web functionality
 requests>=2.31.0
+
+# LLM and Agent functionality
+langchain>=0.1.0
+langchain-openai>=0.0.5
+langchain-community>=0.0.10
+langgraph>=0.0.20
+pydantic>=2.4.0
