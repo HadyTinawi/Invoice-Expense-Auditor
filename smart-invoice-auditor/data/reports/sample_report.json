@@ -1,0 +1,57 @@
+{
+  "invoice_id": "INV-2023-005",
+  "vendor": "Tech Solutions Ltd.",
+  "date": "2023-07-15",
+  "total": 2450.0,
+  "subtotal": 2250.0,
+  "tax": 200.0,
+  "issues_found": true,
+  "issues": [
+    {
+      "type": "Rule Violation: total_matches_calculation",
+      "description": "Total ($2450.00) doesn't match subtotal ($2250.00) + tax ($200.00) = $2450.00",
+      "severity": "medium",
+      "source": "rule_engine",
+      "explanation": "The invoice total doesn't match the sum of subtotal and tax. This could indicate a calculation error, intentional manipulation, or a simple mistake in arithmetic.",
+      "recommendation": "Verify all calculations and request a corrected invoice if necessary.",
+      "title": "Total Calculation Error"
+    },
+    {
+      "type": "Rule Violation: max_item_price",
+      "description": "Line items exceed maximum price for their category: Premium Software License ($1200.00 > $400.00)",
+      "severity": "high",
+      "source": "rule_engine",
+      "explanation": "One or more items exceed the maximum allowed price for their category. This could indicate premium purchases that require special approval.",
+      "recommendation": "Verify if the items with excessive prices were authorized and if they represent the best value for the organization.",
+      "title": "Item Price Limit Exceeded"
+    },
+    {
+      "type": "Potential Duplicate Invoice",
+      "description": "Very similar to invoice INV-2023-004 (same vendor, amount, and date)",
+      "severity": "high",
+      "source": "rule_based",
+      "explanation": "This invoice appears to be a duplicate of a previously processed invoice. Processing duplicates can lead to double payments.",
+      "recommendation": "Compare with the suspected duplicate invoice and verify with the vendor if this is a new charge or a duplicate submission.",
+      "title": "Potential Duplicate Invoice"
+    },
+    {
+      "type": "AI-Detected Anomaly",
+      "description": "Unusual spending pattern detected: 150% increase in software expenses compared to historical average",
+      "severity": "medium",
+      "source": "agent_analysis",
+      "explanation": "Our AI system has detected an unusual pattern or anomaly in this invoice that doesn't match typical vendor behavior or company spending patterns.",
+      "recommendation": "Review the specific details of the anomaly and investigate further if necessary.",
+      "title": "AI-Detected Anomaly"
+    }
+  ],
+  "summary": "Found 4 issues in invoice INV-2023-005 (2 high, 2 medium, 0 low priority). Recommend immediate review due to high-priority issues.",
+  "rule_engine_results": {
+    "total_rules": 7,
+    "passed_rules": 5,
+    "failed_rules": 2
+  },
+  "report_metadata": {
+    "generated_at": "2025-05-07T13:31:14.825675",
+    "generator": "Smart Invoice Auditor Report Generator"
+  }
+}

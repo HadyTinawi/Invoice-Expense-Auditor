@@ -30,3 +30,11 @@ pydantic>=2.4.0
 # Keeping LangChain for utility functions, but removing LangGraph
 langchain>=0.1.0
 langchain-openai>=0.0.5
+
+# Testing
+pytest>=7.3.1
+pytest-cov>=4.1.0
+
+# Utilities
+tqdm>=4.65.0
+PyYAML>=6.0.0  # For rule configuration serialization

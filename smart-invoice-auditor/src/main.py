@@ -22,6 +22,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.ocr.processor import create_processor
 from src.agent.auditor import AuditorAgent
 from src.policy.manager import PolicyManager
+from src.audit.rules import RuleEngine, create_default_rule_sets
 
 
 console = Console()
@@ -102,6 +103,12 @@ def process_invoice(invoice_path: str, policy_path: Optional[str] = None,
     # Decide whether to use the simple agent or the workflow
     use_workflow = os.environ.get("USE_WORKFLOW", "false").lower() == "true"
     
+    # Create rule engine with default rule sets
+    console.print("Creating rule engine...")
+    rule_engine = RuleEngine()
+    for name, rule_set in create_default_rule_sets().items():
+        rule_engine.add_rule_set(rule_set)
+    
     if use_workflow:
         from src.agent.workflow import AuditWorkflow
         workflow = AuditWorkflow(config=agent_config)
@@ -109,14 +116,46 @@ def process_invoice(invoice_path: str, policy_path: Optional[str] = None,
         # Audit invoice using workflow
         console.print("Auditing invoice using LangGraph workflow...")
         with console.status("[bold green]Analyzing invoice for issues...[/bold green]"):
-            audit_results = workflow.run_audit(invoice_data, policy_data)
+            agent_results = workflow.run_audit(invoice_data, policy_data)
     else:
         auditor = AuditorAgent(config=agent_config)
         
         # Audit invoice using agent
         console.print("Auditing invoice using LangChain agent...")
         with console.status("[bold green]Analyzing invoice for issues...[/bold green]"):
-            audit_results = auditor.audit_invoice(invoice_data, policy_data)
+            agent_results = auditor.audit_invoice(invoice_data, policy_data)
+    
+    # Rule-based audit
+    console.print("Performing rule-based audit...")
+    with console.status("[bold green]Checking against rule sets...[/bold green]"):
+        rule_context = {"policy_data": policy_data}
+        rule_results = rule_engine.audit_invoice(invoice_data, "comprehensive_audit", rule_context)
+    
+    # Combine results
+    audit_results = agent_results.copy()
+    
+    # Add rule-based issues
+    rule_based_issues = []
+    for result in rule_results.get("results", []):
+        if not result.get("passed", True):
+            rule_based_issues.append({
+                "type": f"Rule Violation: {result['rule_id']}",
+                "description": result["message"],
+                "severity": result["severity"],
+                "source": "rule_engine"
+            })
+    
+    # Add rule-based issues to the combined results
+    if rule_based_issues:
+        audit_results["issues"].extend(rule_based_issues)
+        audit_results["issues_found"] = True
+    
+    # Update summary to include rule-based results
+    audit_results["rule_engine_results"] = {
+        "total_rules": rule_results.get("total_rules", 0),
+        "passed_rules": rule_results.get("passed_rules", 0),
+        "failed_rules": rule_results.get("failed_rules", 0)
+    }
     
     # Save results if output path is provided
     if output_path:
@@ -142,6 +181,18 @@ def display_results(audit_results: Dict[str, Any]):
     )
     console.print(invoice_panel)
     
+    # Display rule-based audit summary if available
+    if "rule_engine_results" in audit_results:
+        rule_results = audit_results["rule_engine_results"]
+        rule_panel = Panel(
+            f"Total Rules: [bold]{rule_results.get('total_rules', 0)}[/bold]\n"
+            f"Passed Rules: [bold green]{rule_results.get('passed_rules', 0)}[/bold green]\n"
+            f"Failed Rules: [bold red]{rule_results.get('failed_rules', 0)}[/bold red]",
+            title="Rule-Based Audit Results",
+            border_style="yellow"
+        )
+        console.print(rule_panel)
+    
     # Display issues
     issues = audit_results.get("issues", [])
     if issues:
@@ -151,6 +202,7 @@ def display_results(audit_results: Dict[str, Any]):
         table.add_column("Issue Type")
         table.add_column("Description")
         table.add_column("Severity")
+        table.add_column("Source")
         
         for issue in issues:
             severity = issue.get("severity", "medium")
@@ -160,10 +212,19 @@ def display_results(audit_results: Dict[str, Any]):
                 "high": "red"
             }.get(severity.lower(), "yellow")
             
+            source = issue.get("source", "unknown")
+            source_color = {
+                "rule_based": "blue",
+                "agent_analysis": "magenta",
+                "rule_engine": "cyan",
+                "langgraph_workflow": "green"
+            }.get(source, "white")
+            
             table.add_row(
                 issue.get("type", "UNKNOWN"),
                 issue.get("description", "No description"),
-                f"[{severity_color}]{severity}[/{severity_color}]"
+                f"[{severity_color}]{severity}[/{severity_color}]",
+                f"[{source_color}]{source}[/{source_color}]"
             )
         
         console.print(table)

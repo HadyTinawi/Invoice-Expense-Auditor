@@ -1,0 +1,22 @@
+{
+    "invoice_id": "INV-2023-006",
+    "vendor": "IT Services Inc.",
+    "date": "2023-08-15",
+    "subtotal": 8000.00,
+    "tax": 640.00,
+    "total": 8640.00,
+    "line_items": [
+        {
+            "description": "Server Hardware",
+            "category": "hardware",
+            "quantity": 1,
+            "price": 5000.00
+        },
+        {
+            "description": "IT Support (Monthly)",
+            "category": "services",
+            "quantity": 1,
+            "price": 3000.00
+        }
+    ]
+}

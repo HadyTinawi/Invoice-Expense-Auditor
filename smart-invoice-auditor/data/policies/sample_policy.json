@@ -1,0 +1,17 @@
+{
+    "max_amount": 5000.00,
+    "allowed_categories": [
+        "office_supplies", 
+        "electronics", 
+        "software", 
+        "furniture", 
+        "consulting"
+    ],
+    "max_item_prices": {
+        "office_supplies": 100.00,
+        "electronics": 500.00,
+        "software": 400.00,
+        "furniture": 1000.00,
+        "consulting": 350.00
+    }
+}
