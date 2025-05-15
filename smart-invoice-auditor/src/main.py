@@ -279,7 +279,14 @@ def main():
         run_demo()
     elif args.invoice:
         # Process the invoice
-        audit_results = process_invoice(args.invoice, args.policy, args.ocr, args.output)
+        audit_results = process_invoice(
+            args.invoice,
+            args.policy,
+            args.ocr,
+            args.output,
+            args.report,
+            args.report_format
+        )
         
         # Display the results
         display_results(audit_results)
